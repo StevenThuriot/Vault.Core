@@ -29,17 +29,37 @@ namespace Vault
             foreach (var secureString in original)
                 secureString.Dispose();
         }
-
-        public static void EncryptFile(IDictionary<string, SecureString> values, string path, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        
+        public static void EncryptFile(IDictionary<string, SecureString> values, string path, byte[] password, bool writeOffsets = true, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
         {
-            var bytes = EncryptDictionary(values, password, saltSize, iterations, encryptResult);
+            byte[] bytes;
+
+            if (writeOffsets)
+            {
+                byte[] offsets;
+                bytes = EncryptDictionary(values, password, out offsets, saltSize, iterations, encryptResult);
+
+
+
+                var idx = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)) + ".idx";
+                File.WriteAllBytes(idx, offsets);
+                offsets.Clear();
+            }
+            else
+            {
+                bytes = EncryptDictionary(values, password, saltSize, iterations, encryptResult);
+            }
+
             File.WriteAllBytes(path, bytes);
+
             bytes.Clear();
         }
 
         public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
         {
             if (!File.Exists(path)) return new Dictionary<string, SecureString>();
+
+            //TODO: Check for idx file
 
             var bytes = File.ReadAllBytes(path);
             var result = DecryptDictionary(bytes, password, iterations, inputIsEncrypted);
@@ -50,10 +70,25 @@ namespace Vault
 
         public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
         {
-            if (values.Count == 0) return new byte[0];
+            byte[] offsets;
+            var result = EncryptDictionary(values, password, out offsets, saltSize, iterations, encryptResult);
+
+            offsets.Clear();
+
+            return result;
+        }
+
+        public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, out byte[] offsets, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        {
+            if (values.Count == 0) return offsets = new byte[0];
+
+            offsets = new byte[values.Count * sizeof(ushort)];
 
             using (var stream = new MemoryStream())
             {
+                var counter = 0;
+                ushort offset = 0;
+
                 foreach (var kvp in values)
                 {
                     var key = kvp.Key;
@@ -61,8 +96,7 @@ namespace Vault
 
                     fixed (void* keyPtr = key)
                     fixed (void* destPtr = keyArray)
-                        UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
-
+                        memcpy(destPtr, keyPtr, keyArray.Length);
                     var encrypted = EncryptSecureString(kvp.Value, password, saltSize, iterations);
 
                     var index = new byte[sizeof(ushort)];
@@ -79,13 +113,26 @@ namespace Vault
                     stream.Write(encrypted, 0, encrypted.Length);
 
                     encrypted.Clear();
+
+                    fixed (byte* b = &offsets[counter])
+                        *((ushort*)b) = offset;
+
+                    counter += sizeof(ushort);
+
+                    offset = (ushort)(offset + (sizeof(ushort) * 2) + keyArray.Length + encrypted.Length);
                 }
 
                 var result = stream.ToArray();
+
                 if (!encryptResult) return result;
+
+                var originalOffsets = offsets;
+                offsets = Encrypt(offsets, password, saltSize, iterations);
+                originalOffsets.Clear();
 
                 var encrypt = Encrypt(result, password);
                 result.Clear();
+
                 return encrypt;
             }
         }
