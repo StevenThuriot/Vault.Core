@@ -15,7 +15,9 @@ namespace Vault
         const int DEFAULT_ITERATIONS = 1675; //Randomly picked number
         const int DEFAULT_SALTSIZE = 8;
 
-        public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        static string ResolveIndexFile(string path) => Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)) + ".idx";
+
+        public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, bool writeOffsets = true, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
         {
             var dictionary = DecryptFile(path, password, iterations, encryptResult);
             var original = dictionary.Values.ToArray();
@@ -23,13 +25,13 @@ namespace Vault
             foreach (var kvp in values)
                 dictionary[kvp.Key] = kvp.Value;
 
-            EncryptFile(dictionary, path, password, saltSize, iterations, encryptResult);
+            EncryptFile(dictionary, path, password, writeOffsets, saltSize, iterations, encryptResult);
 
             //Clean up decrypted keys, make user clean up their own.
             foreach (var secureString in original)
                 secureString.Dispose();
         }
-        
+
         public static void EncryptFile(IDictionary<string, SecureString> values, string path, byte[] password, bool writeOffsets = true, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
         {
             byte[] bytes;
@@ -38,10 +40,7 @@ namespace Vault
             {
                 byte[] offsets;
                 bytes = EncryptDictionary(values, password, out offsets, saltSize, iterations, encryptResult);
-
-
-
-                var idx = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)) + ".idx";
+                string idx = ResolveIndexFile(path);
                 File.WriteAllBytes(idx, offsets);
                 offsets.Clear();
             }
@@ -55,11 +54,83 @@ namespace Vault
             bytes.Clear();
         }
 
+        public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
+        {
+            if (!File.Exists(path)) return null;
+
+            var idx = ResolveIndexFile(path);
+
+            if (!inputIsEncrypted && File.Exists(idx)) //If encrypted, we can't use the idx file since we can't just read keys from the stream.
+            {
+                var indexes = File.ReadAllBytes(idx);
+
+                if (indexes.Length != 0)
+                {
+                    var keyBytes = new byte[key.Length * sizeof(char)];
+
+                    fixed (void* keyPtr = key, destPtr = keyBytes)
+                        UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
+
+                    using (var fs = File.OpenRead(path))
+                    {
+                        fixed (byte* b = indexes)
+                        {
+                            var ptr = (ushort*)b;
+
+                            var length = new byte[sizeof(ushort)];
+                            do
+                            {
+                                fs.Seek(*ptr, SeekOrigin.Begin);
+                                fs.Read(length, 0, sizeof(ushort));
+
+                                fixed (byte* k = length)
+                                    if (*(ushort*)k != keyBytes.Length)
+                                {
+                                    ptr++;
+                                    continue;
+                                }
+
+                                byte[] content;
+
+                                fixed (byte* k = length)
+                                    content = new byte[*(ushort*)k];
+
+                                fs.Read(length, 0, length.Length); //contentLength
+                                fs.Read(content, 0, content.Length); //key
+
+                                if (UnsafeNativeMethods.ByteEquals(content, keyBytes)) //check if keys match
+                                {
+                                    fixed (byte* k = length)
+                                        content = new byte[*(ushort*)k]; //content length
+
+                                    fs.Read(content, 0, content.Length);
+
+                                    var secureString = DecryptSecureString(content, password, iterations);
+
+                                    content.Clear();
+
+                                    return secureString;
+                                }
+
+                                ptr++;
+                            } while (((byte*)ptr - b) != indexes.Length);
+                        }
+                    }
+                }
+
+                return null;
+            }
+            
+            var bytes = File.ReadAllBytes(path);
+            var result = DecryptDictionary(bytes, key, password, iterations, inputIsEncrypted);
+            bytes.Clear();
+
+            return result;
+        }
+
         public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
         {
             if (!File.Exists(path)) return new Dictionary<string, SecureString>();
-
-            //TODO: Check for idx file
 
             var bytes = File.ReadAllBytes(path);
             var result = DecryptDictionary(bytes, password, iterations, inputIsEncrypted);
@@ -96,7 +167,8 @@ namespace Vault
 
                     fixed (void* keyPtr = key)
                     fixed (void* destPtr = keyArray)
-                        memcpy(destPtr, keyPtr, keyArray.Length);
+                        UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
+
                     var encrypted = EncryptSecureString(kvp.Value, password, saltSize, iterations);
 
                     var index = new byte[sizeof(ushort)];

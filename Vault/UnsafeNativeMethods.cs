@@ -10,5 +10,10 @@ namespace Vault
 
         [DllImport("msvcrt.dll", EntryPoint = "memset", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
         public static extern IntPtr memset(void* dest, int c, int count);
+
+        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int memcmp(byte[] b1, byte[] b2, long count);
+
+        public static bool ByteEquals(byte[] b1, byte[] b2) => b1.Length == b2.Length && memcmp(b1, b2, b1.Length) == 0;
     }
 }
