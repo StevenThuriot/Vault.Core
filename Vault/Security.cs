@@ -17,36 +17,36 @@ namespace Vault
 
         static string ResolveIndexFile(string path) => Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)) + ".idx";
 
-        public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, bool writeOffsets = true, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
-            var dictionary = DecryptFile(path, password, iterations, encryptResult);
+            var dictionary = DecryptFile(path, password, iterations, options);
             var original = dictionary.Values.ToArray();
 
             foreach (var kvp in values)
                 dictionary[kvp.Key] = kvp.Value;
 
-            EncryptFile(dictionary, path, password, writeOffsets, saltSize, iterations, encryptResult);
+            EncryptFile(dictionary, path, password, options, saltSize, iterations);
 
             //Clean up decrypted keys, make user clean up their own.
             foreach (var secureString in original)
                 secureString.Dispose();
         }
 
-        public static void EncryptFile(IDictionary<string, SecureString> values, string path, byte[] password, bool writeOffsets = true, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        public static void EncryptFile(IDictionary<string, SecureString> values, string path, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
             byte[] bytes;
 
-            if (writeOffsets)
+            if (options.WriteOffsets())
             {
                 byte[] offsets;
-                bytes = EncryptDictionary(values, password, out offsets, saltSize, iterations, encryptResult);
+                bytes = EncryptDictionary(values, password, out offsets, options, saltSize, iterations);
                 string idx = ResolveIndexFile(path);
                 File.WriteAllBytes(idx, offsets);
                 offsets.Clear();
             }
             else
             {
-                bytes = EncryptDictionary(values, password, saltSize, iterations, encryptResult);
+                bytes = EncryptDictionary(values, password, options, saltSize, iterations);
             }
 
             File.WriteAllBytes(path, bytes);
@@ -54,13 +54,13 @@ namespace Vault
             bytes.Clear();
         }
 
-        public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
+        public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
             if (!File.Exists(path)) return null;
 
             var idx = ResolveIndexFile(path);
 
-            if (!inputIsEncrypted && File.Exists(idx)) //If encrypted, we can't use the idx file since we can't just read keys from the stream.
+            if (!options.IsResultEncrypted() && File.Exists(idx)) //If encrypted, we can't use the idx file since we can't just read keys from the stream.
             {
                 var indexes = File.ReadAllBytes(idx);
 
@@ -98,7 +98,7 @@ namespace Vault
                                 fs.Read(length, 0, length.Length); //contentLength
                                 fs.Read(content, 0, content.Length); //key
 
-                                if (UnsafeNativeMethods.ByteEquals(content, keyBytes)) //check if keys match
+                                if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
                                 {
                                     fixed (byte* k = length)
                                         content = new byte[*(ushort*)k]; //content length
@@ -122,34 +122,34 @@ namespace Vault
             }
             
             var bytes = File.ReadAllBytes(path);
-            var result = DecryptDictionary(bytes, key, password, iterations, inputIsEncrypted);
+            var result = DecryptDictionary(bytes, key, password, options, iterations);
             bytes.Clear();
 
             return result;
         }
 
-        public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
+        public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
             if (!File.Exists(path)) return new Dictionary<string, SecureString>();
 
             var bytes = File.ReadAllBytes(path);
-            var result = DecryptDictionary(bytes, password, iterations, inputIsEncrypted);
+            var result = DecryptDictionary(bytes, password, options, iterations);
             bytes.Clear();
 
             return result;
         }
 
-        public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
             byte[] offsets;
-            var result = EncryptDictionary(values, password, out offsets, saltSize, iterations, encryptResult);
+            var result = EncryptDictionary(values, password, out offsets, options, saltSize, iterations);
 
             offsets.Clear();
 
             return result;
         }
 
-        public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, out byte[] offsets, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS, bool encryptResult = true)
+        public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, out byte[] offsets, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
             if (values.Count == 0) return offsets = new byte[0];
 
@@ -196,7 +196,7 @@ namespace Vault
 
                 var result = stream.ToArray();
 
-                if (!encryptResult) return result;
+                if (!options.IsResultEncrypted()) return result;
 
                 var originalOffsets = offsets;
                 offsets = Encrypt(offsets, password, saltSize, iterations);
@@ -209,7 +209,7 @@ namespace Vault
             }
         }
 
-        public static SecureString DecryptDictionary(byte[] input, string dictionaryKey, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true, StringComparer comparer = null)
+        public static SecureString DecryptDictionary(byte[] input, string dictionaryKey, byte[] password, EncryptionOptions options = EncryptionOptions.Default, int iterations = DEFAULT_ITERATIONS, StringComparer comparer = null)
         {
             if (input.Length == 0) return null;
 
@@ -217,7 +217,7 @@ namespace Vault
                 comparer = StringComparer.Ordinal;
 
             var src = input;
-            if (inputIsEncrypted)
+            if (options.IsResultEncrypted())
             {
                 src = Decrypt(input, password, iterations);
                 input.Clear();
@@ -269,14 +269,14 @@ namespace Vault
             throw new KeyNotFoundException(string.Format("Key '{0}' was not found in the input array.", dictionaryKey));
         }
 
-        public static IDictionary<string, SecureString> DecryptDictionary(byte[] input, byte[] password, int iterations = DEFAULT_ITERATIONS, bool inputIsEncrypted = true)
+        public static IDictionary<string, SecureString> DecryptDictionary(byte[] input, byte[] password, EncryptionOptions options = EncryptionOptions.Default, int iterations = DEFAULT_ITERATIONS)
         {
             var result = new Dictionary<string, SecureString>();
 
             if (input.Length == 0) return result;
 
             var src = input;
-            if (inputIsEncrypted)
+            if (options.IsResultEncrypted())
             {
                 src = Decrypt(input, password, iterations);
                 input.Clear();
