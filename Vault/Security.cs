@@ -54,13 +54,15 @@ namespace Vault
             bytes.Clear();
         }
 
+
+        //TODO: Clean up
         public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
             if (!File.Exists(path)) return null;
 
             var idx = ResolveIndexFile(path);
 
-            if (!options.IsResultEncrypted() && File.Exists(idx)) //If encrypted, we can't use the idx file since we can't just read keys from the stream.
+            if (File.Exists(idx))
             {
                 var indexes = File.ReadAllBytes(idx);
 
@@ -70,6 +72,64 @@ namespace Vault
 
                     fixed (void* keyPtr = key, destPtr = keyBytes)
                         UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
+
+
+
+                    if (options.IsResultEncrypted())
+                    {
+                        indexes = Decrypt(indexes, password, iterations);
+
+                        fixed (byte* b = indexes)
+                        {
+                            var ptr = (ushort*)b;
+
+                            do
+                            {
+                                var offset = *ptr;
+                                var length = *++ptr;
+                                var contentLength = length * sizeof(char);
+
+
+                                if (length != key.Length)
+                                {
+                                    var bytePtr = (byte*)ptr;
+                                    bytePtr += contentLength;
+                                    continue;
+                                }
+
+                                ptr++;
+
+                                var content = new byte[contentLength];
+
+                                fixed (byte * c = content)
+                                {
+                                    UnsafeNativeMethods.memcpy(c, ptr, content.Length);
+
+                                    if (UnsafeNativeMethods.memcmp(content, keyBytes))
+                                    {
+                                        //var secureString =  DecryptSecureString(content, password, iterations);
+                                        var secureString = new SecureString((char*)c, content.Length / sizeof(char));
+                                        secureString.MakeReadOnly();
+                                        
+                                        content.Clear();
+
+                                        return secureString;
+                                    }
+                                }
+
+                                content.Clear();
+
+                                var bytesPtr = (byte*)ptr;
+                                bytesPtr += contentLength;
+                                ptr = (ushort*)bytesPtr;
+
+                            } while ((byte*)ptr - b != indexes.Length);
+                        }
+
+
+                        return null;
+                    }
+
 
                     using (var fs = File.OpenRead(path))
                     {
@@ -84,10 +144,12 @@ namespace Vault
                                 fs.Read(length, 0, sizeof(ushort));
 
                                 fixed (byte* k = length)
-                                    if (*(ushort*)k != keyBytes.Length)
                                 {
-                                    ptr++;
-                                    continue;
+                                    if (*(ushort*)k != keyBytes.Length)
+                                    {
+                                        ptr++;
+                                        continue;
+                                    }
                                 }
 
                                 byte[] content;
@@ -153,7 +215,17 @@ namespace Vault
         {
             if (values.Count == 0) return offsets = new byte[0];
 
-            offsets = new byte[values.Count * sizeof(ushort)];
+            var offsetArrayLength = values.Count * sizeof(ushort);
+
+            var resultIsEncrypted = options.IsResultEncrypted();
+
+            if (resultIsEncrypted)
+            {
+                //Write keys in idx file when result is encrypted
+                offsetArrayLength += values.Keys.Sum(x => x.Length) * sizeof(char) + values.Keys.Count * sizeof(ushort);
+            }
+            
+            offsets = new byte[offsetArrayLength];
 
             using (var stream = new MemoryStream())
             {
@@ -186,17 +258,38 @@ namespace Vault
 
                     encrypted.Clear();
 
+
                     fixed (byte* b = &offsets[counter])
+                    {
                         *((ushort*)b) = offset;
 
-                    counter += sizeof(ushort);
+                        if (resultIsEncrypted)
+                        {
+                            var keyPtr = (ushort*)b;
+                            keyPtr++;
+
+                            *keyPtr = (ushort)key.Length;
+                            keyPtr++;
+                            
+                            //When encrypted, also write keys to idx
+                            var ptr = (char*)keyPtr;
+                            foreach (var character in key)
+                            {
+                                *ptr = character;
+                                ptr++;
+                            }
+                            
+                            counter += sizeof(ushort) + keyArray.Length;
+                        }
+                    }
 
                     offset = (ushort)(offset + (sizeof(ushort) * 2) + keyArray.Length + encrypted.Length);
+                    counter += sizeof(ushort);
                 }
 
                 var result = stream.ToArray();
 
-                if (!options.IsResultEncrypted()) return result;
+                if (!resultIsEncrypted) return result;
 
                 var originalOffsets = offsets;
                 offsets = Encrypt(offsets, password, saltSize, iterations);
@@ -217,7 +310,9 @@ namespace Vault
                 comparer = StringComparer.Ordinal;
 
             var src = input;
-            if (options.IsResultEncrypted())
+
+            var resultIsEncrypted = options.IsResultEncrypted();
+            if (resultIsEncrypted)
             {
                 src = Decrypt(input, password, iterations);
                 input.Clear();

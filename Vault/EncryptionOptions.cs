@@ -9,11 +9,10 @@ namespace Vault
     {
         None = 0,
 
-        Keys   = 1 << 2,
+        //Keys   = 1 << 2, --> Not implemented yet
         Result = 1 << 3,
         Offsets = 1 << 4,
-
-        All =  Keys | Result,
+        
         Default = Offsets
     }
 
@@ -25,7 +24,7 @@ namespace Vault
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
-        public static bool WriteOffsets(this EncryptionOptions options) => (options & EncryptionOptions.Offsets) == EncryptionOptions.Offsets && !options.IsResultEncrypted();
+        public static bool WriteOffsets(this EncryptionOptions options) => (options & EncryptionOptions.Offsets) == EncryptionOptions.Offsets;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
