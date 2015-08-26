@@ -25,7 +25,7 @@ namespace Vault
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
-        public static bool WriteOffsets(this EncryptionOptions options) => (options & EncryptionOptions.Offsets) == EncryptionOptions.Offsets;
+        public static bool WriteOffsets(this EncryptionOptions options) => (options & EncryptionOptions.Offsets) == EncryptionOptions.Offsets && !options.IsResultEncrypted();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
