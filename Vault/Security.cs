@@ -58,7 +58,7 @@ namespace Vault
         //TODO: Clean up
         public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
-            if (!File.Exists(path)) return null;
+            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
 
             var idx = ResolveIndexFile(path);
 
@@ -72,8 +72,7 @@ namespace Vault
 
                     fixed (void* keyPtr = key, destPtr = keyBytes)
                         UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
-
-
+                    
 
                     if (options.IsResultEncrypted())
                     {
@@ -101,16 +100,15 @@ namespace Vault
 
                                 var content = new byte[contentLength];
 
-                                fixed (byte * c = content)
+                                fixed (byte* c = content)
                                 {
                                     UnsafeNativeMethods.memcpy(c, ptr, content.Length);
 
                                     if (UnsafeNativeMethods.memcmp(content, keyBytes))
                                     {
-                                        //var secureString =  DecryptSecureString(content, password, iterations);
                                         var secureString = new SecureString((char*)c, content.Length / sizeof(char));
                                         secureString.MakeReadOnly();
-                                        
+
                                         content.Clear();
 
                                         return secureString;
@@ -127,7 +125,7 @@ namespace Vault
                         }
 
 
-                        return null;
+                        throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
                     }
 
 
@@ -180,9 +178,9 @@ namespace Vault
                     }
                 }
 
-                return null;
+                throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
             }
-            
+
             var bytes = File.ReadAllBytes(path);
             var result = DecryptDictionary(bytes, key, password, options, iterations);
             bytes.Clear();
@@ -192,7 +190,7 @@ namespace Vault
 
         public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
-            if (!File.Exists(path)) return new Dictionary<string, SecureString>();
+            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
 
             var bytes = File.ReadAllBytes(path);
             var result = DecryptDictionary(bytes, password, options, iterations);
@@ -224,7 +222,7 @@ namespace Vault
                 //Write keys in idx file when result is encrypted
                 offsetArrayLength += values.Keys.Sum(x => x.Length) * sizeof(char) + values.Keys.Count * sizeof(ushort);
             }
-            
+
             offsets = new byte[offsetArrayLength];
 
             using (var stream = new MemoryStream())
@@ -237,8 +235,7 @@ namespace Vault
                     var key = kvp.Key;
                     var keyArray = new byte[key.Length * sizeof(char)];
 
-                    fixed (void* keyPtr = key)
-                    fixed (void* destPtr = keyArray)
+                    fixed (void* keyPtr = key, destPtr = keyArray)
                         UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
 
                     var encrypted = EncryptSecureString(kvp.Value, password, saltSize, iterations);
@@ -270,7 +267,7 @@ namespace Vault
 
                             *keyPtr = (ushort)key.Length;
                             keyPtr++;
-                            
+
                             //When encrypted, also write keys to idx
                             var ptr = (char*)keyPtr;
                             foreach (var character in key)
@@ -278,7 +275,7 @@ namespace Vault
                                 *ptr = character;
                                 ptr++;
                             }
-                            
+
                             counter += sizeof(ushort) + keyArray.Length;
                         }
                     }
@@ -304,7 +301,13 @@ namespace Vault
 
         public static SecureString DecryptDictionary(byte[] input, string dictionaryKey, byte[] password, EncryptionOptions options = EncryptionOptions.Default, int iterations = DEFAULT_ITERATIONS, StringComparer comparer = null)
         {
-            if (input.Length == 0) return null;
+            if (input.Length == 0)
+            {
+                var emptyString = new SecureString();
+                emptyString.MakeReadOnly();
+
+                return emptyString;
+            }
 
             if (comparer == null)
                 comparer = StringComparer.Ordinal;
@@ -418,6 +421,8 @@ namespace Vault
 
         public static byte[] EncryptSecureString(SecureString input, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
+            if (input.Length == 0) return new byte[0];
+
             var ptr = IntPtr.Zero;
             byte[] bytes = null;
 
@@ -462,6 +467,8 @@ namespace Vault
 
         public static byte[] EncryptString(char* input, int length, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
+            if (length == 0) return new byte[0];
+
             var bytes = new byte[length * sizeof(char)];
 
             fixed (void* ptr = bytes)
@@ -475,12 +482,13 @@ namespace Vault
 
         public static string DecryptString(byte[] input, byte[] password, int iterations = DEFAULT_ITERATIONS)
         {
+            if (input.Length == 0) return "";
+
             var bytes = Decrypt(input, password, iterations);
 
             var resultArray = new char[bytes.Length / sizeof(char)];
 
-            fixed (void* bytesPtr = bytes)
-            fixed (void* resultPtr = resultArray)
+            fixed (void* bytesPtr = bytes, resultPtr = resultArray)
                 UnsafeNativeMethods.memcpy(resultPtr, bytesPtr, bytes.Length);
 
             bytes.Clear();
@@ -490,7 +498,6 @@ namespace Vault
 
             return result;
         }
-
 
         public static byte[] Encrypt(byte[] input, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
@@ -540,6 +547,8 @@ namespace Vault
 
         public static byte[] Decrypt(byte[] input, byte[] password, int iterations = DEFAULT_ITERATIONS)
         {
+            if (input.Length == 0) return new byte[0];
+
             fixed (void* p = input)
             {
                 var ptr = (ushort*)p;
