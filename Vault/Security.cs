@@ -86,28 +86,46 @@ namespace Vault
                             {
                                 var offset = *ptr;
                                 var length = *++ptr;
-                                var contentLength = length * sizeof(char);
+                                var keyLengthInBytes = length * sizeof(char);
 
+                                ptr++;
 
                                 if (length != key.Length)
                                 {
                                     var bytePtr = (byte*)ptr;
-                                    bytePtr += contentLength;
+                                    bytePtr += keyLengthInBytes;
+                                    ptr = (ushort*)bytePtr;
                                     continue;
                                 }
 
-                                ptr++;
 
-                                var content = new byte[contentLength];
+                                var keyArray = new byte[keyLengthInBytes];
 
-                                fixed (byte* c = content)
+                                fixed (byte* c = keyArray)
                                 {
-                                    UnsafeNativeMethods.memcpy(c, ptr, content.Length);
+                                    UnsafeNativeMethods.memcpy(c, ptr, keyArray.Length);
 
-                                    if (UnsafeNativeMethods.memcmp(content, keyBytes))
+                                    if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
                                     {
-                                        var secureString = new SecureString((char*)c, content.Length / sizeof(char));
-                                        secureString.MakeReadOnly();
+                                        keyArray.Clear();
+                                        //Key matches, read content from file
+                                        
+                                        var fileContent = File.ReadAllBytes(path);
+
+                                        var decryptedFile = Decrypt(fileContent, password, iterations);
+
+                                        fileContent.Clear();
+
+                                        var contentLength = decryptedFile[offset + sizeof(ushort)];
+                                        var content = new byte[contentLength];
+
+                                        fixed (byte* dest = content, src = decryptedFile)
+                                        {
+                                            var srcPtr = src + offset + sizeof(ushort) * 2 + keyLengthInBytes;
+                                            UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
+                                        }
+
+                                        var secureString = DecryptSecureString(content, password, iterations);
 
                                         content.Clear();
 
@@ -115,10 +133,10 @@ namespace Vault
                                     }
                                 }
 
-                                content.Clear();
+                                keyArray.Clear();
 
                                 var bytesPtr = (byte*)ptr;
-                                bytesPtr += contentLength;
+                                bytesPtr += keyLengthInBytes;
                                 ptr = (ushort*)bytesPtr;
 
                             } while ((byte*)ptr - b != indexes.Length);
