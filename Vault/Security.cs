@@ -64,89 +64,97 @@ namespace Vault
 
             if (File.Exists(idx))
             {
-                var indexes = File.ReadAllBytes(idx);
+                return DecryptUsingIndexFile(path, key, password, iterations, options, idx);
+            }
 
-                if (indexes.Length != 0)
+            var bytes = File.ReadAllBytes(path);
+            var result = DecryptDictionary(bytes, key, password, options, iterations);
+            bytes.Clear();
+
+            return result;
+        }
+
+        static SecureString DecryptUsingIndexFile(string path, string key, byte[] password, int iterations, EncryptionOptions options, string idx)
+        {
+            var indexes = File.ReadAllBytes(idx);
+
+            if (indexes.Length != 0)
+            {
+                var keyBytes = new byte[key.Length * sizeof(char)];
+
+                fixed (void* keyPtr = key, destPtr = keyBytes)
+                    UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
+
+                if (options.IsResultEncrypted())
                 {
-                    var keyBytes = new byte[key.Length * sizeof(char)];
+                    indexes = Decrypt(indexes, password, iterations);
 
-                    fixed (void* keyPtr = key, destPtr = keyBytes)
-                        UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
-                    
-
-                    if (options.IsResultEncrypted())
+                    fixed (byte* b = indexes)
                     {
-                        indexes = Decrypt(indexes, password, iterations);
+                        var ptr = (ushort*)b;
 
-                        fixed (byte* b = indexes)
+                        do
                         {
-                            var ptr = (ushort*)b;
+                            var offset = *ptr;
+                            var length = *++ptr;
+                            var keyLengthInBytes = length * sizeof(char);
 
-                            do
+                            ptr++;
+
+                            if (length != key.Length)
                             {
-                                var offset = *ptr;
-                                var length = *++ptr;
-                                var keyLengthInBytes = length * sizeof(char);
+                                var bytePtr = (byte*)ptr;
+                                bytePtr += keyLengthInBytes;
+                                ptr = (ushort*)bytePtr;
+                                continue;
+                            }
 
-                                ptr++;
 
-                                if (length != key.Length)
+                            var keyArray = new byte[keyLengthInBytes];
+
+                            fixed (byte* c = keyArray)
+                            {
+                                UnsafeNativeMethods.memcpy(c, ptr, keyArray.Length);
+
+                                if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
                                 {
-                                    var bytePtr = (byte*)ptr;
-                                    bytePtr += keyLengthInBytes;
-                                    ptr = (ushort*)bytePtr;
-                                    continue;
-                                }
+                                    keyArray.Clear();
+                                    //Key matches, read content from file
 
+                                    var fileContent = File.ReadAllBytes(path);
 
-                                var keyArray = new byte[keyLengthInBytes];
+                                    var decryptedFile = Decrypt(fileContent, password, iterations);
 
-                                fixed (byte* c = keyArray)
-                                {
-                                    UnsafeNativeMethods.memcpy(c, ptr, keyArray.Length);
+                                    fileContent.Clear();
 
-                                    if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
+                                    var contentLength = decryptedFile[offset + sizeof(ushort)];
+                                    var content = new byte[contentLength];
+
+                                    fixed (byte* dest = content, src = decryptedFile)
                                     {
-                                        keyArray.Clear();
-                                        //Key matches, read content from file
-                                        
-                                        var fileContent = File.ReadAllBytes(path);
-
-                                        var decryptedFile = Decrypt(fileContent, password, iterations);
-
-                                        fileContent.Clear();
-
-                                        var contentLength = decryptedFile[offset + sizeof(ushort)];
-                                        var content = new byte[contentLength];
-
-                                        fixed (byte* dest = content, src = decryptedFile)
-                                        {
-                                            var srcPtr = src + offset + sizeof(ushort) * 2 + keyLengthInBytes;
-                                            UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
-                                        }
-
-                                        var secureString = DecryptSecureString(content, password, iterations);
-
-                                        content.Clear();
-
-                                        return secureString;
+                                        var srcPtr = src + offset + sizeof(ushort) * 2 + keyLengthInBytes;
+                                        UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
                                     }
+
+                                    var secureString = DecryptSecureString(content, password, iterations);
+
+                                    content.Clear();
+
+                                    return secureString;
                                 }
+                            }
 
-                                keyArray.Clear();
+                            keyArray.Clear();
 
-                                var bytesPtr = (byte*)ptr;
-                                bytesPtr += keyLengthInBytes;
-                                ptr = (ushort*)bytesPtr;
+                            var bytesPtr = (byte*)ptr;
+                            bytesPtr += keyLengthInBytes;
+                            ptr = (ushort*)bytesPtr;
 
-                            } while ((byte*)ptr - b != indexes.Length);
-                        }
-
-
-                        throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
+                        } while ((byte*)ptr - b != indexes.Length);
                     }
-
-
+                }
+                else
+                {
                     using (var fs = File.OpenRead(path))
                     {
                         fixed (byte* b = indexes)
@@ -195,15 +203,9 @@ namespace Vault
                         }
                     }
                 }
-
-                throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
             }
 
-            var bytes = File.ReadAllBytes(path);
-            var result = DecryptDictionary(bytes, key, password, options, iterations);
-            bytes.Clear();
-
-            return result;
+            throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
         }
 
         public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
