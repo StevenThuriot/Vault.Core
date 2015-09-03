@@ -1,6 +1,7 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
+using Test;
 
 namespace Vault.Core.Tests
 {
@@ -58,6 +59,21 @@ namespace Vault.Core.Tests
             Assert.IsNotNull(stringResult);
             Assert.IsTrue(stringResult.Length != 0);
             Assert.AreEqual(originalValue, stringResult);
+        }
+
+        [TestMethod]
+        public void EncryptedValuesCanBeDecryptedAsSecureString()
+        {
+            var result = Security.Encrypt(_value, _password);
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.Length != 0);
+
+            var stringResult = Security.DecryptSecureString(result, _password);
+
+            Assert.IsNotNull(stringResult);
+            Assert.IsTrue(stringResult.Length != 0);
+            Assert.AreEqual(originalValue, stringResult.ToUnsecureString());
         }
     }
 }
