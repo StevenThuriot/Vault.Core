@@ -30,6 +30,29 @@ namespace Vault.Core.Tests
             Assert.IsTrue(result.Length != 0);
         }
 
+
+        [TestMethod]
+        public void CanEncryptAString()
+        {
+            var result = Security.EncryptString(originalValue, _password);
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.Length != 0);
+        }
+
+        [TestMethod]
+        public unsafe void CanEncryptACharPointer()
+        {
+            var value = originalValue;
+            fixed (char* inputPtr = value)
+            {
+                var result = Security.EncryptString(inputPtr, value.Length, _password);
+
+                Assert.IsNotNull(result);
+                Assert.IsTrue(result.Length != 0);
+            }
+        }
+
         [TestMethod]
         public void EncryptedValuesCanBeDecrypted()
         {
