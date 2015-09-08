@@ -55,5 +55,11 @@ namespace Test
                 Marshal.ZeroFreeGlobalAllocUnicode(unmanagedString);
             }
         }
+
+        public static unsafe SecureString Secure(this string value)
+        {
+            fixed (char* v = value)
+                return new SecureString(v, value.Length);
+        }
     }
 }

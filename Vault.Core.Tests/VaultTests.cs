@@ -54,6 +54,17 @@ namespace Vault.Core.Tests
         }
 
         [TestMethod]
+        public unsafe void CanEncryptSecureString()
+        {
+            var value = originalValue.Secure();
+
+            var result = Security.EncryptSecureString(value, _password);
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.Length != 0);
+        }
+
+        [TestMethod]
         public void EncryptedValuesCanBeDecrypted()
         {
             var result = Security.Encrypt(_value, _password);
