@@ -2,6 +2,8 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using Test;
+using System.Security;
+using System.Collections.Generic;
 
 namespace Vault.Core.Tests
 {
@@ -59,6 +61,22 @@ namespace Vault.Core.Tests
             var value = originalValue.Secure();
 
             var result = Security.EncryptSecureString(value, _password);
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.Length != 0);
+        }
+
+        [TestMethod]
+        public unsafe void CanEncryptDictionary()
+        {
+            var value = originalValue.Secure();
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", value }
+            };
+
+            var result = Security.EncryptDictionary(dictionary, _password);
 
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
