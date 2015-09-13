@@ -4,6 +4,7 @@ using System.Text;
 using Test;
 using System.Security;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Vault.Core.Tests
 {
@@ -126,6 +127,33 @@ namespace Vault.Core.Tests
             Assert.IsNotNull(stringResult);
             Assert.IsTrue(stringResult.Length != 0);
             Assert.AreEqual(originalValue, stringResult.ToUnsecureString());
+        }
+
+        [TestMethod]
+        public void EncryptedDictionaryCanBeDecrypted()
+        {
+            var value = originalValue.Secure();
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", value }
+            };
+
+            var result = Security.EncryptDictionary(dictionary, _password);
+
+            var decrypted = Security.DecryptDictionary(result, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count);
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual.Key);
+                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+            }
         }
     }
 }
