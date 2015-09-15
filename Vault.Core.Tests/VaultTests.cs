@@ -5,6 +5,8 @@ using Test;
 using System.Security;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.IO;
 
 namespace Vault.Core.Tests
 {
@@ -81,6 +83,29 @@ namespace Vault.Core.Tests
 
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
+        }
+
+        [TestMethod]
+        public unsafe void CanEncryptToAFile()
+        {
+            var value = originalValue.Secure();
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", value }
+            };
+
+            
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            Security.EncryptFile(dictionary, path, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
         }
 
         [TestMethod]
