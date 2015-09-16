@@ -14,6 +14,7 @@ namespace Vault.Core.Tests
     public class VaultTests
     {
         const string originalValue = "This is a sentence! :)";
+        const string originalValue2 = "This is another sentence! :D";
 
         static byte[] _value;
         static byte[] _password;
@@ -95,7 +96,7 @@ namespace Vault.Core.Tests
                 {  "key", value }
             };
 
-            
+
             var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
             File.Delete(path);
 
@@ -106,6 +107,42 @@ namespace Vault.Core.Tests
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
+        }
+
+        [TestMethod]
+        public unsafe void CanDecryptAFile()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { "another Key", originalValue2.Secure() }
+            };
+
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            Security.EncryptFile(dictionary, path, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = Security.DecryptFile(path, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count);
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual.Key);
+                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+            }
         }
 
         [TestMethod]
