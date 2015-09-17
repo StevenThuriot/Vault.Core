@@ -15,6 +15,7 @@ namespace Vault.Core.Tests
     {
         const string originalValue = "This is a sentence! :)";
         const string originalValue2 = "This is another sentence! :D";
+        const string originalValue3 = "This is a third sentence~";
 
         static byte[] _value;
         static byte[] _password;
@@ -143,6 +144,52 @@ namespace Vault.Core.Tests
                 Assert.AreEqual(expected.Value.Length, actual.Value.Length);
                 Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
             }
+        }
+
+        [TestMethod]
+        public unsafe void CanMergeIntoAFile()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { "another key", originalValue2.Secure() }
+            };
+
+            var dictionary2 = new Dictionary<string, SecureString>
+            {
+                { "another key", originalValue3.Secure() },
+            };
+
+            var dictionary3 = new Dictionary<string, SecureString>
+            {
+                { "another third key", originalValue3.Secure() }
+            };
+
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            Security.EncryptFile(dictionary, path, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            Security.MergeFile(dictionary2, path, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+
+            Security.MergeFile(dictionary3, path, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+            Assert.AreNotEqual(firstLength, file.Length);
+            Assert.IsTrue(firstLength < file.Length);
         }
 
         [TestMethod]
