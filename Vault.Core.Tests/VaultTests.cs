@@ -264,5 +264,25 @@ namespace Vault.Core.Tests
                 Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
             }
         }
+
+        [TestMethod]
+        public void SingleKeyCanBeDecryptedFromADictionary()
+        {
+            const string key = "another Key";
+            var secureString = originalValue2.Secure();
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                {  key, secureString }
+            };
+
+            var result = Security.EncryptDictionary(dictionary, _password);
+
+            var decrypted = Security.DecryptDictionary(result, key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(secureString.Length, decrypted.Length);
+            Assert.AreEqual(secureString.ToUnsecureString(), decrypted.ToUnsecureString());
+        }
     }
 }
