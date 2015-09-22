@@ -149,6 +149,17 @@ namespace Vault.Core.Tests
         [TestMethod]
         public unsafe void CanMergeIntoAFile()
         {
+            MergeTest(EncryptionOptions.Default);
+        }
+
+        [TestMethod]
+        public unsafe void CanMergeIntoAFileWithIndexes()
+        {
+            MergeTest(EncryptionOptions.Offsets | EncryptionOptions.Result);
+        }
+
+        static unsafe void MergeTest(EncryptionOptions options)
+        {
             var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", originalValue.Secure() },
@@ -171,7 +182,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            Security.EncryptFile(dictionary, path, _password);
+            Security.EncryptFile(dictionary, path, _password, options: options);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
@@ -179,12 +190,12 @@ namespace Vault.Core.Tests
             var firstLength = file.Length;
             Assert.AreNotEqual(0, firstLength);
 
-            Security.MergeFile(dictionary2, path, _password);
+            Security.MergeFile(dictionary2, path, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
 
-            Security.MergeFile(dictionary3, path, _password);
+            Security.MergeFile(dictionary3, path, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
