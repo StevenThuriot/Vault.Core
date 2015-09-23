@@ -54,8 +54,6 @@ namespace Vault
             bytes.Clear();
         }
 
-
-        //TODO: Clean up
         public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
         {
             if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
