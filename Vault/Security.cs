@@ -535,9 +535,10 @@ namespace Vault
 
                     using (var memStream = new MemoryStream())
                     {
-                        //While a byte would suffice, we'll take the sure-thing and just use a ushort instead.
+                        //While a byte would suffice, 
+                        //we'll take the sure-thing and just use a ushort instead, this allows a key-length of 65535 tokens.
                         var bytes = new byte[sizeof(ushort)];
-
+                        
                         fixed (void* b = bytes)
                             *((ushort*)b) = saltSize;
                         memStream.Write(bytes, 0, bytes.Length);
