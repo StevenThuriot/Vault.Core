@@ -9,7 +9,7 @@ namespace Vault
     {
         None = 0,
 
-        //Keys   = 1 << 2, --> Not implemented yet
+        Keys   = 1 << 2,
         Result = 1 << 3,
         Offsets = 1 << 4,
         
@@ -29,5 +29,9 @@ namespace Vault
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
         public static bool IsResultEncrypted(this EncryptionOptions options) => (options & EncryptionOptions.Result) == EncryptionOptions.Result;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
+        public static bool AreKeysEncrypted(this EncryptionOptions options) => (options & EncryptionOptions.Keys) == EncryptionOptions.Keys;
     }
 }

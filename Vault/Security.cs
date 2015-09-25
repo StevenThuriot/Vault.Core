@@ -17,6 +17,12 @@ namespace Vault
 
         static string ResolveIndexFile(string path) => Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)) + ".idx";
 
+
+
+
+
+        #region Key Value Encryption
+
         public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
             var dictionary = DecryptFile(path, password, iterations, options);
@@ -248,18 +254,29 @@ namespace Vault
                 var counter = 0;
                 ushort offset = 0;
 
+                var keysShouldBeEncrypted = options.AreKeysEncrypted();
+
                 foreach (var kvp in values)
                 {
                     var key = kvp.Key;
-                    var keyArray = new byte[key.Length * sizeof(char)];
+                    
+                    byte[] keyArray;
+                    if (keysShouldBeEncrypted)
+                    {
+                        keyArray = EncryptString(key, password, saltSize, iterations);
+                    }
+                    else
+                    {
+                        keyArray = new byte[key.Length * sizeof(char)];
 
-                    fixed (void* keyPtr = key, destPtr = keyArray)
-                        UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
+                        fixed (void* keyPtr = key, destPtr = keyArray)
+                            UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
+                    }
+ 
 
                     var encrypted = EncryptSecureString(kvp.Value, password, saltSize, iterations);
 
                     var index = new byte[sizeof(ushort)];
-
                     fixed (void* ptr = index)
                         *((ushort*)ptr) = (ushort)keyArray.Length;
                     stream.Write(index, 0, sizeof(ushort));
@@ -338,7 +355,7 @@ namespace Vault
                 src = Decrypt(input, password, iterations);
                 input.Clear();
             }
-
+            
             fixed (byte* ptr = src)
             {
                 var p = ptr;
@@ -352,11 +369,12 @@ namespace Vault
 
                     p = (byte*)keyPtr;
 
+                    
                     var key = new char[keySize / sizeof(char)];
 
                     fixed (void* k = key)
                         UnsafeNativeMethods.memcpy(k, p, keySize);
-
+                    
                     p += keySize;
 
                     var stringKey = new string(key);
@@ -398,6 +416,8 @@ namespace Vault
                 input.Clear();
             }
 
+            var keysAreEncrypted = options.AreKeysEncrypted();
+
             fixed (byte* ptr = src)
             {
                 var p = ptr;
@@ -411,11 +431,31 @@ namespace Vault
 
                     p = (byte*)keyPtr;
 
-                    var key = new char[keySize / sizeof(char)];
+                    char[] key;
+                    if (keysAreEncrypted)
+                    {
+                        var keyBytes = new byte[keySize];
 
-                    fixed (void* k = key)
-                        UnsafeNativeMethods.memcpy(k, p, keySize);
+                        fixed (void* k = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
 
+                        keyBytes = Decrypt(keyBytes, password, iterations);
+
+                        key = new char[keyBytes.Length / sizeof(char)];
+
+                        fixed (void* k = key, kb = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, kb, keyBytes.Length);
+
+                        keyBytes.Clear();
+                    }
+                    else
+                    {
+                        key = new char[keySize / sizeof(char)];
+
+                        fixed (void* k = key)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
+                    }
+                    
                     p += keySize;
 
                     var content = new byte[contentSize];
@@ -436,6 +476,24 @@ namespace Vault
 
             return result;
         }
+
+        #endregion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        #region Simple Encryption
 
         public static byte[] EncryptSecureString(SecureString input, byte[] password, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
@@ -639,5 +697,7 @@ namespace Vault
         {
             Array.Clear(bytes, 0, bytes.Length);
         }
+
+        #endregion
     }
 }

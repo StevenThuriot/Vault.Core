@@ -88,6 +88,22 @@ namespace Vault.Core.Tests
         }
 
         [TestMethod]
+        public unsafe void CanEncryptDictionaryWithEncryptedKeys()
+        {
+            var value = originalValue.Secure();
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", value }
+            };
+
+            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys);
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.Length != 0);
+        }
+
+        [TestMethod]
         public unsafe void CanEncryptToAFile()
         {
             var value = originalValue.Secure();
@@ -262,6 +278,33 @@ namespace Vault.Core.Tests
             var result = Security.EncryptDictionary(dictionary, _password);
 
             var decrypted = Security.DecryptDictionary(result, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count);
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual.Key);
+                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+            }
+        }
+
+        [TestMethod]
+        public void EncryptedDictionaryWithEncryptedKeysCanBeDecrypted()
+        {
+            var value = originalValue.Secure();
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", value }
+            };
+
+            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys);
+
+            var decrypted = Security.DecryptDictionary(result, _password, EncryptionOptions.Keys);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(dictionary.Count, decrypted.Count);
