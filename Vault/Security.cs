@@ -55,7 +55,11 @@ namespace Vault
                 bytes = EncryptDictionary(values, password, options, saltSize, iterations);
             }
 
-            File.WriteAllBytes(path, bytes);
+            using (FileStream fs = new FileStream(path, FileMode.Create))
+            {
+                //fs.Write(new byte[] { (byte)options }, 0, 1);
+                fs.Write(bytes, 0, bytes.Length);
+            }
 
             bytes.Clear();
         }
@@ -125,6 +129,7 @@ namespace Vault
                                     keyArray.Clear();
                                     //Key matches, read content from file
 
+                                    //Since the entire file has been encoded before saving, we need to read all the bytes and decode them first.
                                     var fileContent = File.ReadAllBytes(path);
 
                                     var decryptedFile = Decrypt(fileContent, password, iterations);
@@ -217,6 +222,7 @@ namespace Vault
             if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
 
             var bytes = File.ReadAllBytes(path);
+            
             var result = DecryptDictionary(bytes, password, options, iterations);
             bytes.Clear();
 

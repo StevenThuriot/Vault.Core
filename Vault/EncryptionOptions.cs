@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 namespace Vault
 {
     [Flags]
-    public enum EncryptionOptions
+    public enum EncryptionOptions : byte
     {
         None = 0,
 
