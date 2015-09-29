@@ -390,7 +390,7 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = Security.DecryptFile(path, key, _password, options: EncryptionOptions.Offsets | EncryptionOptions.Result);
+            var decrypted = Security.DecryptFile(path, key, _password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(originalValue2.Length, decrypted.Length);

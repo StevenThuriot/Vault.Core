@@ -35,7 +35,7 @@ namespace Test
 
             EncryptFile(dict, "test.vault", pass, options: options);
 
-            var decrypted = DecryptFile("test.vault", "test 2", pass, options: options);
+            var decrypted = DecryptFile("test.vault", "test 2", pass);
 
             var value = decrypted.ToUnsecureString();
 

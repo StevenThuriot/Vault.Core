@@ -25,7 +25,7 @@ namespace Vault
 
         public static void MergeFile(IDictionary<string, SecureString> values, string path, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
         {
-            var dictionary = DecryptFile(path, password, iterations, options);
+            var dictionary = DecryptFile(path, password, iterations);
             var original = dictionary.Values.ToArray();
 
             foreach (var kvp in values)
@@ -57,14 +57,14 @@ namespace Vault
 
             using (FileStream fs = new FileStream(path, FileMode.Create))
             {
-                //fs.Write(new byte[] { (byte)options }, 0, 1);
+                fs.Write(new byte[] { (byte)options }, 0, 1);
                 fs.Write(bytes, 0, bytes.Length);
             }
 
             bytes.Clear();
         }
 
-        public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
+        public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS)
         {
             if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
 
@@ -72,17 +72,19 @@ namespace Vault
 
             if (File.Exists(idx))
             {
-                return DecryptUsingIndexFile(path, key, password, iterations, options, idx);
+                return DecryptUsingIndexFile(path, key, password, iterations, idx);
             }
+            
+            EncryptionOptions options;
+            var bytes = ReadEncryptedFile(path, out options);
 
-            var bytes = File.ReadAllBytes(path);
             var result = DecryptDictionary(bytes, key, password, options, iterations);
             bytes.Clear();
 
             return result;
         }
 
-        static SecureString DecryptUsingIndexFile(string path, string key, byte[] password, int iterations, EncryptionOptions options, string idx)
+        static SecureString DecryptUsingIndexFile(string path, string key, byte[] password, int iterations, string idx)
         {
             var indexes = File.ReadAllBytes(idx);
 
@@ -92,6 +94,15 @@ namespace Vault
 
                 fixed (void* keyPtr = key, destPtr = keyBytes)
                     UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
+
+                EncryptionOptions options;
+
+                using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    var bytes = new byte[1];
+                    fs.Read(bytes, 0, 1);
+                    options = (EncryptionOptions)bytes[0];
+                }
 
                 if (options.IsResultEncrypted())
                 {
@@ -130,18 +141,20 @@ namespace Vault
                                     //Key matches, read content from file
 
                                     //Since the entire file has been encoded before saving, we need to read all the bytes and decode them first.
-                                    var fileContent = File.ReadAllBytes(path);
+                                    EncryptionOptions fileOptions;//unused
+                                    var fileContent = ReadEncryptedFile(path, out fileOptions);
 
                                     var decryptedFile = Decrypt(fileContent, password, iterations);
 
                                     fileContent.Clear();
 
-                                    var contentLength = decryptedFile[offset + sizeof(ushort)];
+                                    var valueLengthOffset = offset - sizeof(EncryptionOptions) + sizeof(ushort);
+                                    var contentLength = decryptedFile[valueLengthOffset];
                                     var content = new byte[contentLength];
 
                                     fixed (byte* dest = content, src = decryptedFile)
                                     {
-                                        var srcPtr = src + offset + sizeof(ushort) * 2 + keyLengthInBytes;
+                                        var srcPtr = src + valueLengthOffset + sizeof(ushort) + keyLengthInBytes;
                                         UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
                                     }
 
@@ -168,7 +181,7 @@ namespace Vault
                     {
                         fixed (byte* b = indexes)
                         {
-                            var ptr = (ushort*)b;
+                            var ptr = (ushort*)(b);
 
                             var length = new byte[sizeof(ushort)];
                             do
@@ -217,16 +230,44 @@ namespace Vault
             throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
         }
 
-        public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS, EncryptionOptions options = EncryptionOptions.Default)
+        public static IDictionary<string, SecureString> DecryptFile(string path, byte[] password, int iterations = DEFAULT_ITERATIONS)
         {
-            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
+            EncryptionOptions options;
+            var bytes = ReadEncryptedFile(path, out options);
 
-            var bytes = File.ReadAllBytes(path);
-            
             var result = DecryptDictionary(bytes, password, options, iterations);
             bytes.Clear();
 
             return result;
+        }
+
+        static byte[] ReadEncryptedFile(string path, out EncryptionOptions options)
+        {
+            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
+
+            byte[] bytes;
+
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                bytes = new byte[1];
+                fs.Read(bytes, 0, 1);
+                options = (EncryptionOptions)bytes[0];
+
+                int index = 0;
+
+                int count = (int)fs.Length - 1;
+                bytes = new byte[count];
+
+
+                while (count > 0)
+                {
+                    int n = fs.Read(bytes, index, count);
+                    index += n;
+                    count -= n;
+                }
+            }
+
+            return bytes;
         }
 
         public static byte[] EncryptDictionary(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = DEFAULT_SALTSIZE, int iterations = DEFAULT_ITERATIONS)
@@ -258,7 +299,7 @@ namespace Vault
             using (var stream = new MemoryStream())
             {
                 var counter = 0;
-                ushort offset = 0;
+                ushort offset = sizeof (EncryptionOptions);
 
                 var keysShouldBeEncrypted = options.AreKeysEncrypted();
 
