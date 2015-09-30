@@ -249,16 +249,14 @@ namespace Vault
 
             using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                bytes = new byte[1];
-                fs.Read(bytes, 0, 1);
-                options = (EncryptionOptions)bytes[0];
-
                 int index = 0;
-
                 int count = (int)fs.Length - 1;
+                
                 bytes = new byte[count];
 
-
+                fs.Read(bytes, 0, 1);
+                options = (EncryptionOptions)bytes[0];
+                
                 while (count > 0)
                 {
                     int n = fs.Read(bytes, index, count);
