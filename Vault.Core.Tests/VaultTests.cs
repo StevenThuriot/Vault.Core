@@ -163,6 +163,43 @@ namespace Vault.Core.Tests
         }
 
         [TestMethod]
+        public unsafe void WontCrashOnEmptyFiles()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            File.WriteAllText(path, "");
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreEqual(0, file.Length);
+
+            var decrypted = Security.DecryptFile(path, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(0, decrypted.Count);
+        }
+
+        [TestMethod, ExpectedException(typeof(KeyNotFoundException))]
+        public unsafe void SingleKeyWillCrashOnEmptyFiles()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            File.WriteAllText(path, "");
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreEqual(0, file.Length);
+
+            Security.DecryptFile(path, "test", _password);
+        }
+
+        [TestMethod]
         public unsafe void CanMergeIntoAFile()
         {
             MergeTest(EncryptionOptions.Default);

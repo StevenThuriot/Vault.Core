@@ -66,7 +66,11 @@ namespace Vault
 
         public static SecureString DecryptFile(string path, string key, byte[] password, int iterations = DEFAULT_ITERATIONS)
         {
-            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
+            var file = new FileInfo(path);
+
+            if (!file.Exists) throw new FileNotFoundException("File not found", path);
+            if (file.Length <= sizeof(EncryptionOptions)) //Empty file
+                throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
 
             var idx = ResolveIndexFile(path);
 
@@ -243,8 +247,15 @@ namespace Vault
 
         static byte[] ReadEncryptedFile(string path, out EncryptionOptions options)
         {
-            if (!File.Exists(path)) throw new FileNotFoundException("File not found", path);
+            var file = new FileInfo(path);
 
+            if (!file.Exists) throw new FileNotFoundException("File not found", path);
+            if (file.Length <= sizeof(EncryptionOptions)) //Empty file
+            {
+                options = EncryptionOptions.None;
+                return new byte[0];
+            }
+            
             byte[] bytes;
 
             using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
