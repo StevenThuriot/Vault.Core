@@ -257,6 +257,32 @@ namespace Vault.Core.Tests
         }
 
         [TestMethod]
+        public unsafe void CanMergeIntoAnEmptyFile()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            File.WriteAllText(path, "");
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreEqual(0, file.Length);
+
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { "another key", originalValue2.Secure() }
+            };
+
+            Security.MergeFile(dictionary, path, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+        }
+
+        [TestMethod]
         public void EncryptedValuesCanBeDecrypted()
         {
             var result = Security.Encrypt(_value, _password);
