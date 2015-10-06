@@ -746,13 +746,6 @@ namespace Vault
                 return salt;
             }
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
-        static void Clear<T>(this T[] bytes)
-        {
-            Array.Clear(bytes, 0, bytes.Length);
-        }
 
         #endregion
     }

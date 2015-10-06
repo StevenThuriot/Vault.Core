@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)EncryptionOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UnsafeNativeMethods.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Security.cs" />
   </ItemGroup>
