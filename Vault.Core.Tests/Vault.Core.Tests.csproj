@@ -52,13 +52,14 @@
     </Otherwise>
   </Choose>
   <ItemGroup>
+    <Compile Include="Helpers.cs" />
     <Compile Include="VaultTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Test\Test.csproj">
-      <Project>{81a1da3f-2413-4ea3-8207-32049b5e84c7}</Project>
-      <Name>Test</Name>
+    <ProjectReference Include="..\Vault.Compiled\Vault.Compiled.csproj">
+      <Project>{5b7da499-55e8-441b-a241-f9d0bde52086}</Project>
+      <Name>Vault.Compiled</Name>
     </ProjectReference>
   </ItemGroup>
   <Choose>
