@@ -281,6 +281,25 @@ namespace Vault.Core.Tests
             Assert.AreNotEqual(0, file.Length);
         }
 
+        [TestMethod, ExpectedException(typeof(FileNotFoundException))]
+        public unsafe void CannotMergeIntoAFileThatDoesntExist()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+            
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { "another key", originalValue2.Secure() }
+            };
+
+            Security.MergeFile(dictionary, path, _password);
+
+            Assert.IsFalse(File.Exists(path));
+        }
+
         [TestMethod]
         public void EncryptedValuesCanBeDecrypted()
         {
