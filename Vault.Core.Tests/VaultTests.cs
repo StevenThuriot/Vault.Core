@@ -288,7 +288,7 @@ namespace Vault.Core.Tests
             File.Delete(path);
 
             Assert.IsFalse(File.Exists(path));
-            
+
             var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", originalValue.Secure() },
@@ -297,7 +297,19 @@ namespace Vault.Core.Tests
 
             Security.MergeFile(dictionary, path, _password);
 
+            Assert.Fail("Should have thrown a FileNotFoundException");
+        }
+
+        [TestMethod, ExpectedException(typeof(FileNotFoundException))]
+        public unsafe void CannotDecryptAFileThatDoesntExist()
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
             Assert.IsFalse(File.Exists(path));
+            Security.DecryptFile(path, _password);
+
+            Assert.Fail("Should have thrown a FileNotFoundException");
         }
 
         [TestMethod]
