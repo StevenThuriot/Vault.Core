@@ -20,6 +20,10 @@ namespace Vault
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
+        public static bool IsZipped(this EncryptionOptions options) => (options & EncryptionOptions.Zip) == EncryptionOptions.Zip;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
         public static bool AreKeysEncrypted(this EncryptionOptions options) => (options & EncryptionOptions.Keys) == EncryptionOptions.Keys;
         
 

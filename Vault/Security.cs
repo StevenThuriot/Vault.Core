@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime;
 using System.Runtime.CompilerServices;
@@ -58,7 +59,20 @@ namespace Vault
             using (FileStream fs = new FileStream(path, FileMode.Create))
             {
                 fs.Write(new byte[] { (byte)options }, 0, 1);
-                fs.Write(bytes, 0, bytes.Length);
+
+                Stream writeStream = fs;
+
+                var isZipped = options.IsZipped();
+                if (isZipped) writeStream = new DeflateStream(fs, CompressionMode.Compress);
+
+                try
+                {
+                    writeStream.Write(bytes, 0, bytes.Length);
+                }
+                finally
+                {
+                    if (isZipped) writeStream.Dispose();
+                }
             }
 
             bytes.Clear();
@@ -262,17 +276,34 @@ namespace Vault
             {
                 int index = 0;
                 int count = (int)fs.Length - 1;
-                
-                bytes = new byte[count];
+
+                bytes = new byte[1];
 
                 fs.Read(bytes, 0, 1);
                 options = (EncryptionOptions)bytes[0];
-                
-                while (count > 0)
+
+
+                if (options.IsZipped())
                 {
-                    int n = fs.Read(bytes, index, count);
-                    index += n;
-                    count -= n;
+                    using (var output = new MemoryStream())
+                    using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
+                    {
+                        zipStream.CopyTo(output);
+
+                        output.Position = 0;
+                        bytes = output.ToArray();
+                    }
+                }
+                else
+                {
+                    bytes = new byte[count];
+
+                    while (count > 0)
+                    {
+                        int n = fs.Read(bytes, index, count);
+                        index += n;
+                        count -= n;
+                    }
                 }
             }
 
