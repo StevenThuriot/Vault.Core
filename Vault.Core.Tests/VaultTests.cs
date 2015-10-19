@@ -521,6 +521,35 @@ namespace Vault.Core.Tests
         }
 
         [TestMethod]
+        public void SingleKeyCanBeDecryptedFromAZippedFile()
+        {
+            const string key = "another Key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { key, originalValue2.Secure() }
+            };
+
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            Security.EncryptFile(dictionary, path, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = Security.DecryptFile(path, key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(originalValue2.Length, decrypted.Length);
+            Assert.AreEqual(originalValue2, decrypted.ToUnsecureString());
+        }
+
+        [TestMethod]
         public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheResultIsEncrypted()
         {
             const string key = "another Key";

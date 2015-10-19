@@ -117,8 +117,8 @@ namespace Vault
 
                 using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    var bytes = new byte[1];
-                    fs.Read(bytes, 0, 1);
+                    var bytes = new byte[sizeof(EncryptionOptions)];
+                    fs.Read(bytes, 0, sizeof(EncryptionOptions));
                     options = (EncryptionOptions)bytes[0];
                 }
 
@@ -197,49 +197,71 @@ namespace Vault
                 {
                     using (var fs = File.OpenRead(path))
                     {
-                        fixed (byte* b = indexes)
+                        Stream readStream = fs;
+
+                        var isZipped = options.IsZipped();
+                        if (isZipped)
                         {
-                            var ptr = (ushort*)(b);
+                            fs.Seek(sizeof(EncryptionOptions), SeekOrigin.Begin);
 
-                            var length = new byte[sizeof(ushort)];
-                            do
+                            readStream = new MemoryStream();
+                            using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
                             {
-                                fs.Seek(*ptr, SeekOrigin.Begin);
-                                fs.Read(length, 0, sizeof(ushort));
+                                readStream.Write(new byte[] { (byte)options }, 0, sizeof(EncryptionOptions));
+                                zipStream.CopyTo(readStream);
+                                readStream.Position = 0;
+                            }
+                        }
+                        try
+                        {
+                            fixed (byte* b = indexes)
+                            {
+                                var ptr = (ushort*)(b);
 
-                                fixed (byte* k = length)
+                                var length = new byte[sizeof(ushort)];
+                                do
                                 {
-                                    if (*(ushort*)k != keyBytes.Length)
-                                    {
-                                        ptr++;
-                                        continue;
-                                    }
-                                }
+                                    readStream.Seek(*ptr, SeekOrigin.Begin);
+                                    readStream.Read(length, 0, sizeof(ushort));
 
-                                byte[] content;
-
-                                fixed (byte* k = length)
-                                    content = new byte[*(ushort*)k];
-
-                                fs.Read(length, 0, length.Length); //contentLength
-                                fs.Read(content, 0, content.Length); //key
-
-                                if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
-                                {
                                     fixed (byte* k = length)
-                                        content = new byte[*(ushort*)k]; //content length
+                                    {
+                                        if (*(ushort*)k != keyBytes.Length)
+                                        {
+                                            ptr++;
+                                            continue;
+                                        }
+                                    }
 
-                                    fs.Read(content, 0, content.Length);
+                                    byte[] content;
 
-                                    var secureString = DecryptSecureString(content, password, iterations);
+                                    fixed (byte* k = length)
+                                        content = new byte[*(ushort*)k];
 
-                                    content.Clear();
+                                    readStream.Read(length, 0, length.Length); //contentLength
+                                    readStream.Read(content, 0, content.Length); //key
 
-                                    return secureString;
-                                }
+                                    if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
+                                    {
+                                        fixed (byte* k = length)
+                                            content = new byte[*(ushort*)k]; //content length
 
-                                ptr++;
-                            } while (((byte*)ptr - b) != indexes.Length);
+                                        readStream.Read(content, 0, content.Length);
+
+                                        var secureString = DecryptSecureString(content, password, iterations);
+
+                                        content.Clear();
+
+                                        return secureString;
+                                    }
+
+                                    ptr++;
+                                } while (((byte*)ptr - b) != indexes.Length);
+                            }
+                        }
+                        finally
+                        {
+                            if (isZipped) readStream.Dispose();
                         }
                     }
                 }
