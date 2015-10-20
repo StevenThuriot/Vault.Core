@@ -578,6 +578,35 @@ namespace Vault.Core.Tests
             Assert.AreEqual(originalValue2, decrypted.ToUnsecureString());
         }
 
+        [TestMethod]
+        public void SingleKeyCanBeDecryptedFromAZippedFileUsingAnIndexFileWhileTheResultIsEncrypted()
+        {
+            const string key = "another Key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", originalValue.Secure() },
+                { key, originalValue2.Secure() }
+            };
+
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            Security.EncryptFile(dictionary, path, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = Security.DecryptFile(path, key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(originalValue2.Length, decrypted.Length);
+            Assert.AreEqual(originalValue2, decrypted.ToUnsecureString());
+        }
+
 
         [TestMethod, ExpectedException(typeof(System.Security.Cryptography.CryptographicException))]
         public unsafe void DecryptingWithAWrongPasswordThrowsAnException()
