@@ -7,8 +7,8 @@
     <ProjectGuid>{5B7DA499-55E8-441B-A241-F9D0BDE52086}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Vault.Compiled</RootNamespace>
-    <AssemblyName>Vault.Compiled</AssemblyName>
+    <RootNamespace>Vault</RootNamespace>
+    <AssemblyName>Vault</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
@@ -43,6 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Publicize.cs" />
   </ItemGroup>
   <Import Project="..\Vault\Vault.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

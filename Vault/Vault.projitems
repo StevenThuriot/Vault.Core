@@ -9,8 +9,12 @@
     <Import_RootNamespace>Vault</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Defaults.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)EncryptionOptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FileStorage.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)IStorage.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UnsafeNativeMethods.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Security.cs" />
   </ItemGroup>

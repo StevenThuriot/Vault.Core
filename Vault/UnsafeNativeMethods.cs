@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Vault
 {
-    unsafe static class UnsafeNativeMethods
+    static unsafe class UnsafeNativeMethods
     {
         [DllImport("msvcrt.dll", EntryPoint = "memcpy", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
         public static extern IntPtr memcpy(void* dest, void* src, int count);
