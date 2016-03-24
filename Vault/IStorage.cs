@@ -1,13 +1,16 @@
-using System.Collections.Generic;
-using System.Security;
+using System.IO;
 
-namespace Vault
+namespace Vault.Core
 {
-    public interface IStorage
+    partial interface IStorage
     {
-        void Merge(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = Defaults.SALTSIZE, int iterations = Defaults.ITERATIONS);
-        void Encrypt(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = Defaults.SALTSIZE, int iterations = Defaults.ITERATIONS);
-        SecureString Decrypt(string key, byte[] password, int iterations = Defaults.ITERATIONS);
-        IDictionary<string, SecureString> Decrypt(byte[] password, int iterations = Defaults.ITERATIONS);
+        bool Exists { get; }
+        long Length { get; }
+        bool IndexExists { get; }
+        void WriteIndex(byte[] offsets);
+        void Ensure();
+        Stream Create();
+        Stream Read();
+        byte[] ResolveIndexes();
     }
 }

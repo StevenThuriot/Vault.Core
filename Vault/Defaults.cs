@@ -1,8 +1,8 @@
-namespace Vault
+namespace Vault.Core
 {
-    static class Defaults
+    static partial class Defaults
     {
-        internal const int ITERATIONS = 1675; //Randomly picked number
-        internal const int SALTSIZE = 8;
+        public const int ITERATIONS = 1675; //Randomly picked number
+        public const int SALTSIZE = 8;
     }
 }

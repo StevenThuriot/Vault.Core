@@ -117,8 +117,8 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
@@ -141,8 +141,8 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
@@ -157,21 +157,20 @@ namespace Vault.Core.Tests
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
-
-
+            
             var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
             File.Delete(path);
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(_password);
+            var decrypted = container.Decrypt(_password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(dictionary.Count, decrypted.Count);
@@ -200,14 +199,14 @@ namespace Vault.Core.Tests
             File.Delete(path);
 
             Assert.IsFalse(File.Exists(path));
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(_password);
+            var decrypted = container.Decrypt(_password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(dictionary.Count, decrypted.Count);
@@ -236,8 +235,8 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IStorage storage = new FileStorage(path);
-            var decrypted = storage.Decrypt(_password);
+            IContainer container = new FileContainer(path);
+            var decrypted = container.Decrypt(_password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(0, decrypted.Count);
@@ -257,8 +256,8 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IStorage storage = new FileStorage(path);
-            storage.Decrypt("test", _password);
+            IContainer container = new FileContainer(path);
+            container.Decrypt("test", _password);
         }
 
         [TestMethod]
@@ -297,8 +296,8 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, options: options);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, options: options);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
@@ -306,12 +305,12 @@ namespace Vault.Core.Tests
             var firstLength = file.Length;
             Assert.AreNotEqual(0, firstLength);
 
-            storage.Merge(dictionary2, _password, options: options);
+            container.Merge(dictionary2, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
 
-            storage.Merge(dictionary3, _password, options: options);
+            container.Merge(dictionary3, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
@@ -339,8 +338,8 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IStorage storage = new FileStorage(path);
-            storage.Merge(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Merge(dictionary, _password);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
@@ -360,8 +359,8 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IStorage storage = new FileStorage(path);
-            storage.Merge(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Merge(dictionary, _password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
         }
@@ -374,8 +373,8 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Decrypt(_password);
+            IContainer container = new FileContainer(path);
+            container.Decrypt(_password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
         }
@@ -516,14 +515,14 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(key, _password);
+            var decrypted = container.Decrypt(key, _password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
@@ -546,14 +545,14 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(key, _password);
+            var decrypted = container.Decrypt(key, _password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
@@ -576,14 +575,14 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(key, _password);
+            var decrypted = container.Decrypt(key, _password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
@@ -606,14 +605,14 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            var decrypted = storage.Decrypt(key, _password);
+            var decrypted = container.Decrypt(key, _password);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
@@ -637,14 +636,14 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IStorage storage = new FileStorage(path);
-            storage.Encrypt(dictionary, _password);
+            IContainer container = new FileContainer(path);
+            container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
             Assert.IsTrue(file.Exists);
             Assert.AreNotEqual(0, file.Length);
 
-            storage.Decrypt(Encoding.Unicode.GetBytes("This password is wrong"));
+            container.Decrypt(Encoding.Unicode.GetBytes("This password is wrong"));
         }
     }
 }

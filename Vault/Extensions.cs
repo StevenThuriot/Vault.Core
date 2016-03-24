@@ -2,7 +2,7 @@
 using System.Runtime;
 using System.Runtime.CompilerServices;
 
-namespace Vault
+namespace Vault.Core.Extensions
 {
     static class Extensions
     {

@@ -4,7 +4,7 @@ using System.Security;
 
 namespace Vault.Core
 {
-    static class Helpers
+    static partial class Helpers
     {
         public static string ToUnsecureString(this SecureString securePassword)
         {

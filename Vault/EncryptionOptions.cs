@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Vault
+namespace Vault.Core
 {
     [Flags]
     public enum EncryptionOptions : byte

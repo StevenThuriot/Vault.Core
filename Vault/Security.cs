@@ -5,8 +5,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
+using Vault.Core.Extensions;
 
-namespace Vault
+namespace Vault.Core
 {
     static unsafe partial class Security
     {

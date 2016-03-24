@@ -7,8 +7,8 @@
     <ProjectGuid>{5B7DA499-55E8-441B-A241-F9D0BDE52086}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Vault</RootNamespace>
-    <AssemblyName>Vault</AssemblyName>
+    <RootNamespace>Vault.Core</RootNamespace>
+    <AssemblyName>Vault.Core</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
