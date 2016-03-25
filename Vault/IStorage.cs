@@ -12,5 +12,6 @@ namespace Vault.Core
         Stream Create();
         Stream Read();
         byte[] ResolveIndexes();
+        EncryptionOptions ReadEncryptionOptions();
     }
 }

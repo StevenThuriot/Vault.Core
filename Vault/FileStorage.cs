@@ -50,5 +50,25 @@ namespace Vault.Core
         {
             return File.ReadAllBytes(_indexFile);
         }
+
+        public unsafe EncryptionOptions ReadEncryptionOptions()
+        {
+            if (Length <= sizeof(EncryptionOptions))
+                return EncryptionOptions.None;
+
+            byte[] bytes;
+            using (var fs = Read())
+            {
+                bytes = new byte[sizeof(EncryptionOptions)];
+                fs.Read(bytes, 0, sizeof(EncryptionOptions));
+            }
+
+            EncryptionOptions options;
+
+            fixed (byte* b = bytes)
+                options = *(EncryptionOptions*)b;
+
+            return options;
+        }
     }
 }

@@ -112,15 +112,8 @@ namespace Vault.Core
                 fixed (void* keyPtr = key, destPtr = keyBytes)
                     UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
 
-                EncryptionOptions options;
-
-                using (var fs = _storage.Read())
-                {
-                    var bytes = new byte[sizeof(EncryptionOptions)];
-                    fs.Read(bytes, 0, sizeof(EncryptionOptions));
-                    options = (EncryptionOptions)bytes[0];
-                }
-
+                var options = _storage.ReadEncryptionOptions();
+                
                 if (options.IsResultEncrypted())
                 {
                     indexes = Security.Decrypt(indexes, password, iterations);
@@ -284,7 +277,7 @@ namespace Vault.Core
         {
             _storage.Ensure();
 
-            var headerLength = sizeof(EncryptionOptions);
+            const int headerLength = sizeof(EncryptionOptions);
 
             if (_storage.Length <= headerLength) //Empty file
             {
@@ -297,7 +290,7 @@ namespace Vault.Core
             using (var fs = _storage.Read())
             {
                 int index = 0;
-                int count = (int)fs.Length - 1;
+                int count = (int)fs.Length - headerLength;
 
                 bytes = new byte[headerLength];
 
@@ -305,8 +298,7 @@ namespace Vault.Core
 
                 fixed (byte* b = bytes)
                     options = *(EncryptionOptions*)b;
-
-
+                
                 if (options.IsZipped())
                 {
                     using (var output = new MemoryStream())
@@ -325,6 +317,7 @@ namespace Vault.Core
                     while (count > 0)
                     {
                         int n = fs.Read(bytes, index, count);
+
                         index += n;
                         count -= n;
                     }
