@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -17,9 +16,7 @@ namespace Vault.Core
         {
             if (storage == null)
                 throw new ArgumentNullException(nameof(storage));
-
-            Contract.EndContractBlock();
-
+            
             _storage = storage;
         }
 
@@ -56,10 +53,8 @@ namespace Vault.Core
                 bytes = Security.EncryptDictionary(values, password, options, saltSize, iterations);
             }
 
-            using (var fs = _storage.Create())
+            using (var fs = _storage.Create(options))
             {
-                fs.Write(new[] { (byte)options }, 0, 1);
-
                 var writeStream = fs;
 
                 var isZipped = options.IsZipped();
@@ -81,19 +76,17 @@ namespace Vault.Core
         public SecureString Decrypt(string key, byte[] password, int iterations)
         {
             _storage.Ensure();
-            Contract.EndContractBlock();
 
-            if (_storage.Length <= sizeof(EncryptionOptions)) //Empty file
+            if (_storage.Length <= sizeof(EncryptionOptions)) //Empty storage
                 throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
-
-            
-            if (_storage.IndexExists)
+                        
+            if (_storage.HasOffsets)
             {
-                return DecryptUsingIndexFile(key, password, iterations);
+                return DecryptUsingOffsets(key, password, iterations);
             }
 
             EncryptionOptions options;
-            var bytes = ReadEncryptedFile(out options);
+            var bytes = ReadEncryptedStorage(out options);
 
             var result = Security.DecryptDictionary(bytes, key, password, options, iterations);
             bytes.Clear();
@@ -101,7 +94,7 @@ namespace Vault.Core
             return result;
         }
 
-        SecureString DecryptUsingIndexFile(string key, byte[] password, int iterations)
+        SecureString DecryptUsingOffsets(string key, byte[] password, int iterations)
         {
             var indexes = _storage.ResolveIndexes();
 
@@ -148,21 +141,21 @@ namespace Vault.Core
                                 if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
                                 {
                                     keyArray.Clear();
-                                    //Key matches, read content from file
+                                    //Key matches, read content from storage
 
-                                    //Since the entire file has been encoded before saving, we need to read all the bytes and decode them first.
-                                    EncryptionOptions fileOptions;//unused
-                                    var fileContent = ReadEncryptedFile(out fileOptions);
+                                    //Since the entire storage has been encoded before saving, we need to read all the bytes and decode them first.
+                                    EncryptionOptions storageOptions;//unused
+                                    var storageContent = ReadEncryptedStorage(out storageOptions);
 
-                                    var decryptedFile = Security.Decrypt(fileContent, password, iterations);
+                                    var decryptedStorage = Security.Decrypt(storageContent, password, iterations);
 
-                                    fileContent.Clear();
+                                    storageContent.Clear();
 
                                     var valueLengthOffset = offset - sizeof(EncryptionOptions) + sizeof(ushort);
-                                    var contentLength = decryptedFile[valueLengthOffset];
+                                    var contentLength = decryptedStorage[valueLengthOffset];
                                     var content = new byte[contentLength];
 
-                                    fixed (byte* dest = content, src = decryptedFile)
+                                    fixed (byte* dest = content, src = decryptedStorage)
                                     {
                                         var srcPtr = src + valueLengthOffset + sizeof(ushort) + keyLengthInBytes;
                                         UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
@@ -199,7 +192,12 @@ namespace Vault.Core
                             readStream = new MemoryStream();
                             using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
                             {
-                                readStream.Write(new[] { (byte)options }, 0, sizeof(EncryptionOptions));
+                                var bytes = new byte[sizeof(EncryptionOptions)];
+
+                                fixed (byte* b = bytes)
+                                    UnsafeNativeMethods.memcpy(b, &options, sizeof(EncryptionOptions));
+
+                                readStream.Write(bytes, 0, sizeof(EncryptionOptions));
                                 zipStream.CopyTo(readStream);
                                 readStream.Position = 0;
                             }
@@ -265,7 +263,7 @@ namespace Vault.Core
         public IDictionary<string, SecureString> Decrypt(byte[] password, int iterations)
         {
             EncryptionOptions options;
-            var bytes = ReadEncryptedFile(out options);
+            var bytes = ReadEncryptedStorage(out options);
 
             var result = Security.DecryptDictionary(bytes, password, options, iterations);
             bytes.Clear();
@@ -273,31 +271,23 @@ namespace Vault.Core
             return result;
         }
 
-        byte[] ReadEncryptedFile(out EncryptionOptions options)
+        byte[] ReadEncryptedStorage(out EncryptionOptions options)
         {
             _storage.Ensure();
 
             const int headerLength = sizeof(EncryptionOptions);
 
-            if (_storage.Length <= headerLength) //Empty file
+            if (_storage.Length <= headerLength) //Empty storage
             {
                 options = EncryptionOptions.None;
                 return new byte[0];
             }
-
+                        
             byte[] bytes;
-
-            using (var fs = _storage.Read())
+            using (var fs = _storage.Read(out options))
             {
                 int index = 0;
                 int count = (int)fs.Length - headerLength;
-
-                bytes = new byte[headerLength];
-
-                fs.Read(bytes, 0, headerLength);
-
-                fixed (byte* b = bytes)
-                    options = *(EncryptionOptions*)b;
                 
                 if (options.IsZipped())
                 {

@@ -22,7 +22,7 @@ namespace Vault.Core
 
         public bool Exists => File.Exists(_file);
         public long Length => new FileInfo(_file).Length;
-        public bool IndexExists => File.Exists(_indexFile);
+        public bool HasOffsets => File.Exists(_indexFile);
 
 
         public void WriteIndex(byte[] offsets)
@@ -69,6 +69,34 @@ namespace Vault.Core
                 options = *(EncryptionOptions*)b;
 
             return options;
+        }
+
+        public unsafe Stream Read(out EncryptionOptions options)
+        {
+            var fs = Read();
+            
+            var bytes = new byte[sizeof(EncryptionOptions)];
+
+            fs.Read(bytes, 0, sizeof(EncryptionOptions));
+
+            fixed (byte* b = bytes)
+                options = *(EncryptionOptions*)b;
+
+            return fs;
+        }
+
+        public unsafe Stream Create(EncryptionOptions options)
+        {
+            var fs = Create();
+
+            var bytes = new byte[sizeof(EncryptionOptions)];
+
+            fixed (byte* b = bytes)
+                UnsafeNativeMethods.memcpy(b, &options, sizeof(EncryptionOptions));
+
+            fs.Write(bytes, 0, sizeof(EncryptionOptions));
+
+            return fs;
         }
     }
 }
