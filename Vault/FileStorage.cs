@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics.Contracts;
 using System.IO;
+using Vault.Core.Extensions;
 
 namespace Vault.Core
 {
@@ -22,8 +23,22 @@ namespace Vault.Core
 
         public bool Exists => File.Exists(_file);
         public long Length => new FileInfo(_file).Length;
-        public bool HasOffsets => File.Exists(_indexFile);
+        public bool HasOffsets
+        {
+            get
+            {
+                if (!File.Exists(_indexFile))
+                    return false;
 
+                return ReadEncryptionOptions().WriteOffsets();
+            }
+        }
+
+        public Stream Create() => new FileStream(_file, FileMode.Create);
+
+        public Stream Read() => new FileStream(_file, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        public byte[] ResolveIndexes() => File.ReadAllBytes(_indexFile);
 
         public void WriteIndex(byte[] offsets)
         {
@@ -34,21 +49,6 @@ namespace Vault.Core
         {
             if (!Exists)
                 throw new FileNotFoundException("File Not found", _file);
-        }
-
-        public Stream Create()
-        {
-            return new FileStream(_file, FileMode.Create);
-        }
-
-        public Stream Read()
-        {
-            return new FileStream(_file, FileMode.Open, FileAccess.Read, FileShare.Read);
-        }
-
-        public byte[] ResolveIndexes()
-        {
-            return File.ReadAllBytes(_indexFile);
         }
 
         public unsafe EncryptionOptions ReadEncryptionOptions()

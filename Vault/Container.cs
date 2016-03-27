@@ -187,7 +187,7 @@ namespace Vault.Core
                         var isZipped = options.IsZipped();
                         if (isZipped)
                         {
-                            fs.Seek(sizeof(EncryptionOptions), SeekOrigin.Begin);
+                            fs.Seek(sizeof(EncryptionOptions), SeekOrigin.Begin); //skip header
 
                             readStream = new MemoryStream();
                             using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
