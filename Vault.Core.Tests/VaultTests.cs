@@ -305,12 +305,12 @@ namespace Vault.Core.Tests
             var firstLength = file.Length;
             Assert.AreNotEqual(0, firstLength);
 
-            container.Merge(dictionary2, _password, options: options);
+            container.InsertOrUpdate(dictionary2, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
 
-            container.Merge(dictionary3, _password, options: options);
+            container.InsertOrUpdate(dictionary3, _password, options: options);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
@@ -339,7 +339,7 @@ namespace Vault.Core.Tests
             };
 
             IContainer container = new FileContainer(path);
-            container.Merge(dictionary, _password);
+            container.InsertOrUpdate(dictionary, _password);
 
             file.Refresh();
             Assert.AreNotEqual(0, file.Length);
@@ -360,7 +360,7 @@ namespace Vault.Core.Tests
             };
 
             IContainer container = new FileContainer(path);
-            container.Merge(dictionary, _password);
+            container.InsertOrUpdate(dictionary, _password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
         }

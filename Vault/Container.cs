@@ -21,7 +21,7 @@ namespace Vault.Core
         }
 
 
-        public void Merge(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void InsertOrUpdate(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             var dictionary = Decrypt(password, iterations);
             var original = dictionary.Values.ToArray();
@@ -33,6 +33,19 @@ namespace Vault.Core
 
             //Clean up decrypted keys, make user clean up their own.
             foreach (var secureString in original)
+                secureString.Dispose();
+        }
+
+        public void InsertOrUpdate(string key, SecureString value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            var dictionary = Decrypt(password, iterations);
+            
+            dictionary[key] = value;
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+            
+            //Clean up decrypted keys, make user clean up their own.
+            foreach (var secureString in dictionary.Values)
                 secureString.Dispose();
         }
 
