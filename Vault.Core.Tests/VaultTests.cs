@@ -63,7 +63,7 @@ namespace Vault.Core.Tests
         {
             var value = ORIGINAL_VALUE.Secure();
 
-            var result = Security.EncryptSecureString(value, _password, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var result = new SecureStringSecurity().EncryptValue(value, _password, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
@@ -79,7 +79,7 @@ namespace Vault.Core.Tests
                 {  "key", value }
             };
 
-            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var result = new SecureStringSecurity().EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
@@ -95,7 +95,7 @@ namespace Vault.Core.Tests
                 {  "key", value }
             };
 
-            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var result = new SecureStringSecurity().EncryptDictionary(dictionary, _password, EncryptionOptions.Keys, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
@@ -117,7 +117,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -141,7 +141,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -163,7 +163,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -199,7 +199,7 @@ namespace Vault.Core.Tests
             File.Delete(path);
 
             Assert.IsFalse(File.Exists(path));
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -235,7 +235,7 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             var decrypted = container.Decrypt(_password);
 
             Assert.IsNotNull(decrypted);
@@ -256,7 +256,7 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Decrypt("test", _password);
         }
 
@@ -296,7 +296,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, options: options);
 
             var file = new FileInfo(path);
@@ -338,7 +338,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.InsertOrUpdate(dictionary, _password);
 
             file.Refresh();
@@ -359,7 +359,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.InsertOrUpdate(dictionary, _password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
@@ -373,7 +373,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Decrypt(_password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
@@ -418,7 +418,8 @@ namespace Vault.Core.Tests
             Assert.IsNotNull(result);
             Assert.IsTrue(result.Length != 0);
 
-            var stringResult = Security.DecryptSecureString(result, _password, Defaults.ITERATIONS);
+
+            var stringResult = new SecureStringSecurity().DecryptValue(result, _password, Defaults.ITERATIONS);
 
             Assert.IsNotNull(stringResult);
             Assert.IsTrue(stringResult.Length != 0);
@@ -435,9 +436,10 @@ namespace Vault.Core.Tests
                 {  "key", value }
             };
 
-            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var security = new SecureStringSecurity();
+            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
-            var decrypted = Security.DecryptDictionary(result, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
+            var decrypted = security.DecryptDictionary(result, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(dictionary.Count, decrypted.Count);
@@ -462,9 +464,10 @@ namespace Vault.Core.Tests
                 {  "key", value }
             };
 
-            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var security = new SecureStringSecurity();
+            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
-            var decrypted = Security.DecryptDictionary(result, _password, EncryptionOptions.Keys, Defaults.ITERATIONS);
+            var decrypted = security.DecryptDictionary(result, _password, EncryptionOptions.Keys, Defaults.ITERATIONS);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(dictionary.Count, decrypted.Count);
@@ -490,9 +493,10 @@ namespace Vault.Core.Tests
                 {  key, secureString }
             };
 
-            var result = Security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
+            var security = new SecureStringSecurity();
+            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
-            var decrypted = Security.DecryptDictionary(result, key, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
+            var decrypted = security.DecryptDictionary(result, key, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
 
             Assert.IsNotNull(decrypted);
             Assert.AreEqual(secureString.Length, decrypted.Length);
@@ -515,7 +519,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -545,7 +549,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -575,7 +579,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result);
 
             var file = new FileInfo(path);
@@ -605,7 +609,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -636,7 +640,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer container = new FileContainer(path);
+            IContainer<SecureString> container = new FileContainer<SecureString>(path, new SecureStringSecurity());
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);

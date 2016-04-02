@@ -3,25 +3,28 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Security;
 using Vault.Core.Extensions;
 
 namespace Vault.Core
 {
-    unsafe partial class Container : IContainer
+    unsafe partial class Container<T> : IContainer<T>
     {
         readonly IStorage _storage;
-        
-        public Container(IStorage storage)
+        readonly Security<T> _security;
+
+        public Container(IStorage storage, Security<T> security)
         {
             if (storage == null)
                 throw new ArgumentNullException(nameof(storage));
-            
+            if (security == null)
+                throw new ArgumentNullException(nameof(security));
+
             _storage = storage;
+            _security = security;
         }
 
 
-        public void InsertOrUpdate(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void InsertOrUpdate(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             var dictionary = Decrypt(password, iterations);
             var original = dictionary.Values.ToArray();
@@ -31,39 +34,46 @@ namespace Vault.Core
 
             Encrypt(dictionary, password, options, saltSize, iterations);
 
-            //Clean up decrypted keys, make user clean up their own.
-            foreach (var secureString in original)
-                secureString.Dispose();
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
         }
 
-        public void InsertOrUpdate(string key, SecureString value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void InsertOrUpdate(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             var dictionary = Decrypt(password, iterations);
             
             dictionary[key] = value;
 
             Encrypt(dictionary, password, options, saltSize, iterations);
-            
-            //Clean up decrypted keys, make user clean up their own.
-            foreach (var secureString in dictionary.Values)
-                secureString.Dispose();
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in dictionary.OfType<IDisposable>())
+                    T.Dispose();
+            }
         }
 
-        public void Encrypt(IDictionary<string, SecureString> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void Encrypt(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             byte[] bytes;
 
             if (options.WriteOffsets())
             {
                 byte[] offsets;
-                bytes = Security.EncryptDictionary(values, password, out offsets, options, saltSize, iterations);
+                bytes = _security.EncryptDictionary(values, password, out offsets, options, saltSize, iterations);
 
                 _storage.WriteIndex(offsets);
                 offsets.Clear();
             }
             else
             {
-                bytes = Security.EncryptDictionary(values, password, options, saltSize, iterations);
+                bytes = _security.EncryptDictionary(values, password, options, saltSize, iterations);
             }
 
             using (var fs = _storage.Create(options))
@@ -86,7 +96,7 @@ namespace Vault.Core
             bytes.Clear();
         }
 
-        public SecureString Decrypt(string key, byte[] password, int iterations)
+        public T Decrypt(string key, byte[] password, int iterations)
         {
             _storage.Ensure();
 
@@ -101,13 +111,13 @@ namespace Vault.Core
             EncryptionOptions options;
             var bytes = ReadEncryptedStorage(out options);
 
-            var result = Security.DecryptDictionary(bytes, key, password, options, iterations);
+            var result = _security.DecryptDictionary(bytes, key, password, options, iterations);
             bytes.Clear();
 
             return result;
         }
 
-        SecureString DecryptUsingOffsets(string key, byte[] password, int iterations)
+        T DecryptUsingOffsets(string key, byte[] password, int iterations)
         {
             var indexes = _storage.ResolveIndexes();
 
@@ -174,11 +184,11 @@ namespace Vault.Core
                                         UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
                                     }
 
-                                    var secureString = Security.DecryptSecureString(content, password, iterations);
+                                    var T = _security.DecryptValue(content, password, iterations);
 
                                     content.Clear();
 
-                                    return secureString;
+                                    return T;
                                 }
                             }
 
@@ -251,11 +261,11 @@ namespace Vault.Core
 
                                         readStream.Read(content, 0, content.Length);
 
-                                        var secureString = Security.DecryptSecureString(content, password, iterations);
+                                        var T = _security.DecryptValue(content, password, iterations);
 
                                         content.Clear();
 
-                                        return secureString;
+                                        return T;
                                     }
 
                                     ptr++;
@@ -273,12 +283,12 @@ namespace Vault.Core
             throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
         }
 
-        public IDictionary<string, SecureString> Decrypt(byte[] password, int iterations)
+        public IDictionary<string, T> Decrypt(byte[] password, int iterations)
         {
             EncryptionOptions options;
             var bytes = ReadEncryptedStorage(out options);
 
-            var result = Security.DecryptDictionary(bytes, password, options, iterations);
+            var result = _security.DecryptDictionary(bytes, password, options, iterations);
             bytes.Clear();
 
             return result;
