@@ -9,6 +9,7 @@
     <Import_RootNamespace>Vault</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)ContainerFactory.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FileContainer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FileStorage.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Defaults.cs" />

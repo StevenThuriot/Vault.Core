@@ -1,5 +1,7 @@
 ﻿namespace Vault.Core
 {
+    public partial class ContainerFactory { }
+
     public partial interface IContainer<T> { }
     public partial class Container<T> { }
     public partial class FileContainer<T> { }
