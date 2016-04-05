@@ -6,6 +6,9 @@
     public partial class Container<T> { }
     public partial class FileContainer<T> { }
 
+    public partial interface ISettingsContainer<T> { }
+    public partial class SettingsContainer<T> { }
+
     public partial interface IStorage { }
     public partial class FileStorage { }
 

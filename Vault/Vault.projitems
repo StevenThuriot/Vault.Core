@@ -18,9 +18,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)Container.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IContainer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ISettingsContainer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IStorage.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SecureStringSecurity.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Security.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SettingsContainer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TypedSecurity.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UnsafeNativeMethods.cs" />
   </ItemGroup>

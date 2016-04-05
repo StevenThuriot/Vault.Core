@@ -117,7 +117,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -141,7 +141,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -163,7 +163,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -199,7 +199,7 @@ namespace Vault.Core.Tests
             File.Delete(path);
 
             Assert.IsFalse(File.Exists(path));
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -221,6 +221,44 @@ namespace Vault.Core.Tests
             }
         }
 
+
+        [TestMethod]
+        public void WorksWithTemporarilyStoredSettings()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another Key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.WithSettings.FromFile(path, _password, clearPassword: false);
+            container.Encrypt(dictionary);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt();
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count);
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual.Key);
+                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+            }
+        }
+
+
         [TestMethod]
         public void WontCrashOnEmptyFiles()
         {
@@ -235,7 +273,7 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             var decrypted = container.Decrypt(_password);
 
             Assert.IsNotNull(decrypted);
@@ -256,7 +294,7 @@ namespace Vault.Core.Tests
             Assert.IsTrue(file.Exists);
             Assert.AreEqual(0, file.Length);
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Decrypt("test", _password);
         }
 
@@ -296,7 +334,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, options: options);
 
             var file = new FileInfo(path);
@@ -338,7 +376,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.InsertOrUpdate(dictionary, _password);
 
             file.Refresh();
@@ -359,7 +397,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.InsertOrUpdate(dictionary, _password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
@@ -373,7 +411,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Decrypt(_password);
 
             Assert.Fail("Should have thrown a FileNotFoundException");
@@ -519,7 +557,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
@@ -549,7 +587,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -579,7 +617,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result);
 
             var file = new FileInfo(path);
@@ -609,7 +647,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
 
             var file = new FileInfo(path);
@@ -640,7 +678,7 @@ namespace Vault.Core.Tests
 
             Assert.IsFalse(File.Exists(path));
 
-            IContainer<SecureString> container = ContainerFactory.FromFile(path);
+            var container = ContainerFactory.FromFile(path);
             container.Encrypt(dictionary, _password);
 
             var file = new FileInfo(path);
