@@ -157,7 +157,7 @@ namespace Vault.Core.Tests
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
-            
+
             var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
             File.Delete(path);
 
@@ -182,6 +182,76 @@ namespace Vault.Core.Tests
                 Assert.AreEqual(expected.Key, actual.Key);
                 Assert.AreEqual(expected.Value.Length, actual.Value.Length);
                 Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+            }
+        }
+
+        [TestMethod]
+        public void CanResolveKeys()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another Key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanResolveKeys.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.ResolveKeys(_password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count());
+
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual);
+            }
+        }
+
+        [TestMethod]
+        public void CanResolveEncryptedKeys()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another Key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanResolveEncryptedKeys.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Keys);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.ResolveKeys(_password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(dictionary.Count, decrypted.Count());
+
+            for (int i = 0; i < dictionary.Count; i++)
+            {
+                var expected = dictionary.ElementAt(i);
+                var actual = decrypted.ElementAt(i);
+
+                Assert.AreEqual(expected.Key, actual);
             }
         }
 

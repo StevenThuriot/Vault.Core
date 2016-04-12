@@ -135,5 +135,10 @@ namespace Vault.Core
         {
             return _container.Decrypt(password, iterations);
         }
+
+        public IEnumerable<string> ResolveKeys(byte[] password, int iterations)
+        {
+            return _container.ResolveKeys(password, iterations);
+        }
     }
 }

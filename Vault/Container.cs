@@ -11,7 +11,7 @@ namespace Vault.Core
     {
         readonly IStorage _storage;
         readonly Security<T> _security;
-
+        
         public Container(IStorage storage, Security<T> security)
         {
             if (storage == null)
@@ -338,6 +338,14 @@ namespace Vault.Core
             }
 
             return bytes;
+        }
+
+        public IEnumerable<string> ResolveKeys(byte[] password, int iterations)
+        {
+            EncryptionOptions options;
+            var bytes = ReadEncryptedStorage(out options);
+
+            return _security.DecryptKeys(bytes, password, options, iterations);
         }
     }
 }

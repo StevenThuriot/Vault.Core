@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Security;
 
 namespace Vault.Core
 {
@@ -10,5 +9,6 @@ namespace Vault.Core
         void Encrypt(IDictionary<string, T> values, byte[] password, EncryptionOptions options = EncryptionOptions.Default, ushort saltSize = Defaults.SALTSIZE, int iterations = Defaults.ITERATIONS);
         T Decrypt(string key, byte[] password, int iterations = Defaults.ITERATIONS);
         IDictionary<string, T> Decrypt(byte[] password, int iterations = Defaults.ITERATIONS);
+        IEnumerable<string> ResolveKeys(byte[] password, int iterations = Defaults.ITERATIONS);
     }
 }

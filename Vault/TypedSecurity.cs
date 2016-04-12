@@ -262,6 +262,73 @@ namespace Vault.Core
             return result;
         }
 
+        public IEnumerable<string> DecryptKeys(byte[] input, byte[] password, EncryptionOptions options, int iterations)
+        {
+            if (input.Length == 0)
+                return Enumerable.Empty<string>();
+
+            var keys = new List<string>();
+
+            var src = input;
+            if (options.IsResultEncrypted())
+            {
+                src = Security.Decrypt(input, password, iterations);
+                input.Clear();
+            }
+
+            var keysAreEncrypted = options.AreKeysEncrypted();
+
+            fixed (byte* ptr = src)
+            {
+                var p = ptr;
+
+                do
+                {
+                    var keyPtr = (ushort*)p;
+
+                    var keySize = *keyPtr++;
+                    var contentSize = *keyPtr++;
+
+                    p = (byte*)keyPtr;
+
+                    char[] key;
+                    if (keysAreEncrypted)
+                    {
+                        var keyBytes = new byte[keySize];
+
+                        fixed (void* k = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
+
+                        keyBytes = Security.Decrypt(keyBytes, password, iterations);
+
+                        key = new char[keyBytes.Length / sizeof(char)];
+
+                        fixed (void* k = key, kb = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, kb, keyBytes.Length);
+
+                        keyBytes.Clear();
+                    }
+                    else
+                    {
+                        key = new char[keySize / sizeof(char)];
+
+                        fixed (void* k = key)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
+                    }
+
+                    p += keySize;
+                    
+                    keys.Add(new string(key));
+                    key.Clear();
+
+                    p += contentSize;
+
+                } while ((p - ptr) != src.Length);
+            }
+
+            return keys;
+        }
+
         public abstract byte[] EncryptValue(T input, byte[] password, ushort saltSize, int iterations);
 
         public abstract T DecryptValue(byte[] input, byte[] password, int iterations);
