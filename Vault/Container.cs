@@ -24,6 +24,148 @@ namespace Vault.Core
         }
 
 
+        public void Insert(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            if (ResolveKeys(password, iterations).Contains(key))
+                throw new ArgumentException($"An element with the same key already exists ({key})");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            dictionary[key] = value;
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+        public void Insert(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            var unsavedKeys = values.Keys.Intersect(ResolveKeys(password, iterations)).ToArray();
+
+            if (unsavedKeys.Length != 0)
+                throw new ArgumentException($@"Elements with these keys already exist: 
+
+{string.Join(Environment.NewLine, unsavedKeys)}");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            foreach (var kvp in values)
+            {
+                dictionary[kvp.Key] = kvp.Value;
+            }
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+        public void Update(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            if (!ResolveKeys(password, iterations).Contains(key))
+                throw new ArgumentException($"An element with that key does not exist ({key})");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            dictionary[key] = value;
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+        public void Update(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            var unsavedKeys = values.Keys.Except(ResolveKeys(password, iterations)).ToArray();
+
+            if (unsavedKeys.Length != 0)
+                throw new ArgumentException($@"Elements with these keys does not exist: 
+
+{string.Join(Environment.NewLine, unsavedKeys)}");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            foreach (var kvp in values)
+            {
+                dictionary[kvp.Key] = kvp.Value;
+            }
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+        public void Delete(string key, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            if (!ResolveKeys(password, iterations).Contains(key))
+                throw new ArgumentException($"An element with that key does not exist ({key})");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            dictionary.Remove(key);
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+        public void Delete(IEnumerable<string> keys, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {
+            var unsavedKeys = keys.Except(ResolveKeys(password, iterations)).ToArray();
+
+            if (unsavedKeys.Length != 0)
+                throw new ArgumentException($@"Elements with these keys does not exist: 
+
+{string.Join(Environment.NewLine, unsavedKeys)}");
+
+            var dictionary = Decrypt(password, iterations);
+            var original = dictionary.Values.ToArray();
+
+            foreach (var key in keys)
+            {
+                dictionary.Remove(key);
+            }
+
+            Encrypt(dictionary, password, options, saltSize, iterations);
+
+            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            {
+                //Clean up decrypted keys, make user clean up their own.
+                foreach (var T in original.OfType<IDisposable>())
+                    T.Dispose();
+            }
+        }
+
+
         public void InsertOrUpdate(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             var dictionary = Decrypt(password, iterations);
