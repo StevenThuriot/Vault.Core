@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.IO;
+using System;
 
 namespace Vault.Core.Tests
 {
@@ -424,6 +425,167 @@ namespace Vault.Core.Tests
             Assert.AreNotEqual(0, file.Length);
             Assert.AreNotEqual(firstLength, file.Length);
             Assert.IsTrue(firstLength < file.Length);
+        }
+
+        [TestMethod]
+        public void CanInsertAKey()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            const string insertedKey = "another third key";
+            container.Insert(insertedKey, ORIGINAL_VALUE3.Secure(), _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(_password);
+
+            Assert.AreEqual(3, decrypted.Count);
+            foreach (var item in decrypted)
+            {
+                SecureString value;
+                if (dictionary.TryGetValue(item.Key, out value))
+                {
+                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                    continue;
+                }
+
+                if (item.Key == insertedKey)
+                {
+                    Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
+                    continue;
+                }
+
+                Assert.Fail($"Key {item.Key} not found");
+            }
+        }
+
+        [TestMethod, ExpectedException(typeof(ArgumentException))]
+        public void CantInsertAKeyTwice()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+            
+            container.Insert("another key", ORIGINAL_VALUE3.Secure(), _password);
+            Assert.Fail("Should not be able to insert a key twice");
+        }
+
+        [TestMethod]
+        public void CanInsertSeveralKeys()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var dictionary2 = new Dictionary<string, SecureString>
+            {
+                { "another third key", ORIGINAL_VALUE3.Secure() },
+                { "another fourth key", ORIGINAL_VALUE3.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Insert(dictionary2, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(_password);
+
+            Assert.AreEqual(dictionary.Count + dictionary2.Count, decrypted.Count);
+            foreach (var item in decrypted)
+            {
+                SecureString value;
+                if (dictionary.TryGetValue(item.Key, out value) || dictionary2.TryGetValue(item.Key, out value))
+                {
+                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                    continue;
+                }
+
+                Assert.Fail($"Key {item.Key} not found");
+            }
+        }
+
+        [TestMethod, ExpectedException(typeof(ArgumentException))]
+        public void CantInsertSeveralKeysTwice()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var dictionary2 = new Dictionary<string, SecureString>
+            {
+                { "another third key", ORIGINAL_VALUE3.Secure() },
+                { "another key", ORIGINAL_VALUE3.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Insert(dictionary2, _password);
+            Assert.Fail("Should not be able to insert a key twice");
         }
 
         [TestMethod]
