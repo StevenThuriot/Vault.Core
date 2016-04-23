@@ -751,8 +751,151 @@ namespace Vault.Core.Tests
             Assert.Fail("Should not be able to Update a key that doesn't exist");
         }
 
+        [TestMethod]
+        public void CanDeleteAKey()
+        {
+            const string deleteKey = "another key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { deleteKey, ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Delete(deleteKey, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(_password);
+
+            Assert.AreEqual(1, decrypted.Count);
+            foreach (var item in decrypted)
+            {
+                SecureString value;
+                if (dictionary.TryGetValue(item.Key, out value))
+                {
+                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                    continue;
+                }
+
+                Assert.Fail($"Key {item.Key} not found");
+            }
+        }
 
 
+        [TestMethod, ExpectedException(typeof(ArgumentException))]
+        public void CantDeleteAKeyThatDoesntExist()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password);
+            Assert.Fail("Should not be able to delete a key that doesn't exist");
+        }
+
+        [TestMethod]
+        public void CanDeleteSeveralKeys()
+        {
+            const string deleteKey = "another key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { deleteKey + "1", ORIGINAL_VALUE2.Secure() },
+                { deleteKey + "2", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Delete(new[] { deleteKey + "1", deleteKey + "2" }, _password);
+
+            file.Refresh();
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(_password);
+
+            Assert.AreEqual(1, decrypted.Count);
+            foreach (var item in decrypted)
+            {
+                SecureString value;
+                if (dictionary.TryGetValue(item.Key, out value))
+                {
+                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                    continue;
+                }
+
+                Assert.Fail($"Key {item.Key} not found");
+            }
+        }
+
+        [TestMethod, ExpectedException(typeof(ArgumentException))]
+        public void CantDeleteSeveralKeysThatDontExist()
+        {
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { "another key", ORIGINAL_VALUE2.Secure() }
+            };
+
+            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
+            File.Delete(path);
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+
+            var firstLength = file.Length;
+            Assert.AreNotEqual(0, firstLength);
+
+            container.Delete(new[] { "another third key", "another key" }, _password);
+            Assert.Fail("Should not be able to Update a key that doesn't exist");
+        }
 
 
         [TestMethod]
