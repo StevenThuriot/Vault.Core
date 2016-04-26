@@ -12,6 +12,7 @@ namespace Vault.Core
         Offsets = 1 << 4,
         Zip = 1 << 5,
 
-        Default = Offsets
+        Default = Offsets,
+        All = Keys | Result | Offsets | Zip
     }
 }

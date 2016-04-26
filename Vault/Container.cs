@@ -39,8 +39,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -66,8 +66,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -86,8 +86,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -113,8 +113,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -133,8 +133,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -160,8 +160,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -180,8 +180,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in original.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in original.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
@@ -196,8 +196,8 @@ namespace Vault.Core
             if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
             {
                 //Clean up decrypted keys, make user clean up their own.
-                foreach (var T in dictionary.OfType<IDisposable>())
-                    T.Dispose();
+                foreach (var disposable in dictionary.OfType<IDisposable>())
+                    disposable.Dispose();
             }
         }
 
