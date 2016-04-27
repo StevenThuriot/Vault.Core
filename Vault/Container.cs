@@ -259,6 +259,39 @@ namespace Vault.Core
             return result;
         }
 
+        public IDictionary<string, T> Decrypt(byte[] password, int iterations)
+        {
+            EncryptionOptions options;
+            var bytes = ReadEncryptedStorage(out options);
+
+            var result = _security.DecryptDictionary(bytes, password, options, iterations);
+            bytes.Clear();
+
+            return result;
+        }
+        
+        public IEnumerable<string> ResolveKeys(byte[] password, int iterations)
+        {
+            EncryptionOptions options;
+            var bytes = ReadEncryptedStorage(out options);
+
+            return _security.DecryptKeys(bytes, password, options, iterations);
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         T DecryptUsingOffsets(string key, byte[] password, int iterations)
         {
             var indexes = _storage.ResolveIndexes();
@@ -271,169 +304,171 @@ namespace Vault.Core
                     UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyBytes.Length);
 
                 var options = _storage.ReadEncryptionOptions();
-                
+
                 if (options.IsResultEncrypted())
                 {
-                    indexes = Security.Decrypt(indexes, password, iterations);
+                    return DecryptUsingOffsetsWithEncryptedResult(key, password, iterations, indexes, keyBytes);
+                }
 
+                return DecryptUsingOffsetsWithoutEncryptedResult(key, password, iterations, indexes, keyBytes, options);
+            }
+
+            throw ThrowKeyNotFound(key);
+        }
+
+        T DecryptUsingOffsetsWithoutEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes, EncryptionOptions options)
+        {
+            using (var fs = _storage.Read())
+            {
+                var readStream = fs;
+
+                var isZipped = options.IsZipped();
+                if (isZipped)
+                {
+                    fs.Seek(sizeof(EncryptionOptions), SeekOrigin.Begin); //skip header
+
+                    readStream = new MemoryStream();
+                    using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
+                    {
+                        var bytes = new byte[sizeof(EncryptionOptions)];
+
+                        fixed (byte* b = bytes)
+                            UnsafeNativeMethods.memcpy(b, &options, sizeof(EncryptionOptions));
+
+                        readStream.Write(bytes, 0, sizeof(EncryptionOptions));
+                        zipStream.CopyTo(readStream);
+                        readStream.Position = 0;
+                    }
+                }
+
+                try
+                {
                     fixed (byte* b = indexes)
                     {
-                        var ptr = (ushort*)b;
+                        var ptr = (ushort*)(b);
 
+                        var length = new byte[sizeof(ushort)];
                         do
                         {
-                            var offset = *ptr;
-                            var length = *++ptr;
-                            var keyLengthInBytes = length * sizeof(char);
+                            readStream.Seek(*ptr, SeekOrigin.Begin);
+                            readStream.Read(length, 0, sizeof(ushort));
 
-                            ptr++;
-
-                            if (length != key.Length)
+                            fixed (byte* k = length)
                             {
-                                var bytePtr = (byte*)ptr;
-                                bytePtr += keyLengthInBytes;
-                                ptr = (ushort*)bytePtr;
-                                continue;
-                            }
-
-
-                            var keyArray = new byte[keyLengthInBytes];
-
-                            fixed (byte* c = keyArray)
-                            {
-                                UnsafeNativeMethods.memcpy(c, ptr, keyArray.Length);
-
-                                if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
+                                if (*(ushort*)k != keyBytes.Length)
                                 {
-                                    keyArray.Clear();
-                                    //Key matches, read content from storage
-
-                                    //Since the entire storage has been encoded before saving, we need to read all the bytes and decode them first.
-                                    EncryptionOptions storageOptions;//unused
-                                    var storageContent = ReadEncryptedStorage(out storageOptions);
-
-                                    var decryptedStorage = Security.Decrypt(storageContent, password, iterations);
-
-                                    storageContent.Clear();
-
-                                    var valueLengthOffset = offset - sizeof(EncryptionOptions) + sizeof(ushort);
-                                    var contentLength = decryptedStorage[valueLengthOffset];
-                                    var content = new byte[contentLength];
-
-                                    fixed (byte* dest = content, src = decryptedStorage)
-                                    {
-                                        var srcPtr = src + valueLengthOffset + sizeof(ushort) + keyLengthInBytes;
-                                        UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
-                                    }
-
-                                    var T = _security.DecryptValue(content, password, iterations);
-
-                                    content.Clear();
-
-                                    return T;
+                                    ptr++;
+                                    continue;
                                 }
                             }
 
-                            keyArray.Clear();
+                            byte[] content;
 
-                            var bytesPtr = (byte*)ptr;
-                            bytesPtr += keyLengthInBytes;
-                            ptr = (ushort*)bytesPtr;
+                            fixed (byte* k = length)
+                                content = new byte[*(ushort*)k];
 
-                        } while ((byte*)ptr - b != indexes.Length);
+                            readStream.Read(length, 0, length.Length); //contentLength
+                            readStream.Read(content, 0, content.Length); //key
+
+                            if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
+                            {
+                                fixed (byte* k = length)
+                                    content = new byte[*(ushort*)k]; //content length
+
+                                readStream.Read(content, 0, content.Length);
+
+                                var decryptedValue = _security.DecryptValue(content, password, iterations);
+
+                                content.Clear();
+
+                                return decryptedValue;
+                            }
+
+                            ptr++;
+                        } while (((byte*)ptr - b) != indexes.Length);
                     }
                 }
-                else
+                finally
                 {
-                    using (var fs = _storage.Read())
-                    {
-                        var readStream = fs;
-
-                        var isZipped = options.IsZipped();
-                        if (isZipped)
-                        {
-                            fs.Seek(sizeof(EncryptionOptions), SeekOrigin.Begin); //skip header
-
-                            readStream = new MemoryStream();
-                            using (var zipStream = new DeflateStream(fs, CompressionMode.Decompress))
-                            {
-                                var bytes = new byte[sizeof(EncryptionOptions)];
-
-                                fixed (byte* b = bytes)
-                                    UnsafeNativeMethods.memcpy(b, &options, sizeof(EncryptionOptions));
-
-                                readStream.Write(bytes, 0, sizeof(EncryptionOptions));
-                                zipStream.CopyTo(readStream);
-                                readStream.Position = 0;
-                            }
-                        }
-                        try
-                        {
-                            fixed (byte* b = indexes)
-                            {
-                                var ptr = (ushort*)(b);
-
-                                var length = new byte[sizeof(ushort)];
-                                do
-                                {
-                                    readStream.Seek(*ptr, SeekOrigin.Begin);
-                                    readStream.Read(length, 0, sizeof(ushort));
-
-                                    fixed (byte* k = length)
-                                    {
-                                        if (*(ushort*)k != keyBytes.Length)
-                                        {
-                                            ptr++;
-                                            continue;
-                                        }
-                                    }
-
-                                    byte[] content;
-
-                                    fixed (byte* k = length)
-                                        content = new byte[*(ushort*)k];
-
-                                    readStream.Read(length, 0, length.Length); //contentLength
-                                    readStream.Read(content, 0, content.Length); //key
-
-                                    if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
-                                    {
-                                        fixed (byte* k = length)
-                                            content = new byte[*(ushort*)k]; //content length
-
-                                        readStream.Read(content, 0, content.Length);
-
-                                        var T = _security.DecryptValue(content, password, iterations);
-
-                                        content.Clear();
-
-                                        return T;
-                                    }
-
-                                    ptr++;
-                                } while (((byte*)ptr - b) != indexes.Length);
-                            }
-                        }
-                        finally
-                        {
-                            if (isZipped) readStream.Dispose();
-                        }
-                    }
+                    if (isZipped) readStream.Dispose();
                 }
             }
 
-            throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
+            throw ThrowKeyNotFound(key);
         }
 
-        public IDictionary<string, T> Decrypt(byte[] password, int iterations)
+        T DecryptUsingOffsetsWithEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes)
         {
-            EncryptionOptions options;
-            var bytes = ReadEncryptedStorage(out options);
+            indexes = Security.Decrypt(indexes, password, iterations);
 
-            var result = _security.DecryptDictionary(bytes, password, options, iterations);
-            bytes.Clear();
+            fixed (byte* b = indexes)
+            {
+                var ptr = (ushort*)b;
 
-            return result;
+                do
+                {
+                    var offset = *ptr;
+                    var length = *++ptr;
+                    var keyLengthInBytes = length * sizeof(char);
+
+                    ptr++;
+
+                    if (length != key.Length)
+                    {
+                        var bytePtr = (byte*)ptr;
+                        bytePtr += keyLengthInBytes;
+                        ptr = (ushort*)bytePtr;
+                        continue;
+                    }
+
+
+                    var keyArray = new byte[keyLengthInBytes];
+
+                    fixed (byte* c = keyArray)
+                    {
+                        UnsafeNativeMethods.memcpy(c, ptr, keyArray.Length);
+
+                        if (UnsafeNativeMethods.memcmp(keyArray, keyBytes))
+                        {
+                            keyArray.Clear();
+                            //Key matches, read content from storage
+
+                            //Since the entire storage has been encoded before saving, we need to read all the bytes and decode them first.
+                            EncryptionOptions storageOptions;//unused
+                            var storageContent = ReadEncryptedStorage(out storageOptions);
+
+                            var decryptedStorage = Security.Decrypt(storageContent, password, iterations);
+
+                            storageContent.Clear();
+
+                            var valueLengthOffset = offset - sizeof(EncryptionOptions) + sizeof(ushort);
+                            var contentLength = decryptedStorage[valueLengthOffset];
+                            var content = new byte[contentLength];
+
+                            fixed (byte* dest = content, src = decryptedStorage)
+                            {
+                                var srcPtr = src + valueLengthOffset + sizeof(ushort) + keyLengthInBytes;
+                                UnsafeNativeMethods.memcpy(dest, srcPtr, content.Length);
+                            }
+
+                            var decryptedValue = _security.DecryptValue(content, password, iterations);
+
+                            content.Clear();
+
+                            return decryptedValue;
+                        }
+                    }
+
+                    keyArray.Clear();
+
+                    var bytesPtr = (byte*)ptr;
+                    bytesPtr += keyLengthInBytes;
+                    ptr = (ushort*)bytesPtr;
+
+                } while ((byte*)ptr - b != indexes.Length);
+            }
+
+            throw ThrowKeyNotFound(key);
         }
 
         byte[] ReadEncryptedStorage(out EncryptionOptions options)
@@ -482,12 +517,6 @@ namespace Vault.Core
             return bytes;
         }
 
-        public IEnumerable<string> ResolveKeys(byte[] password, int iterations)
-        {
-            EncryptionOptions options;
-            var bytes = ReadEncryptedStorage(out options);
-
-            return _security.DecryptKeys(bytes, password, options, iterations);
-        }
+        static Exception ThrowKeyNotFound(string key) => new KeyNotFoundException($"Key '{key}' was not found in the input array.");
     }
 }
