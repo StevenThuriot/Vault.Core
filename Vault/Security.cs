@@ -4,10 +4,8 @@ using Vault.Core.Extensions;
 
 namespace Vault.Core
 {
-    unsafe abstract partial class Security
+    unsafe static partial class Security
     {
-        #region Simple Encryption
-
         public static byte[] EncryptString(string input, byte[] password, ushort saltSize, int iterations)
         {
             fixed (char* inputPtr = input)
@@ -163,7 +161,5 @@ namespace Vault.Core
                 return salt;
             }
         }
-
-        #endregion
     }
 }
