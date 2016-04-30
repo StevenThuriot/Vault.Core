@@ -13,7 +13,7 @@ namespace Vault.Core
         public FileStorage(string file)
         {
             if (string.IsNullOrWhiteSpace(file))
-                throw new ArgumentNullException(nameof(file));
+                throw Error.ArgumentNull(nameof(file));
 
             Contract.EndContractBlock();
 
@@ -48,7 +48,7 @@ namespace Vault.Core
         public void Ensure()
         {
             if (!Exists)
-                throw new FileNotFoundException("File Not found", _file);
+                throw Error.FileNotFound(_file);
         }
 
         public unsafe EncryptionOptions ReadEncryptionOptions()

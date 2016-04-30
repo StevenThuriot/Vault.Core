@@ -184,8 +184,8 @@ namespace Vault.Core
 
                 } while (p - ptr != input.Length);
             }
-
-            throw new KeyNotFoundException($"Key '{dictionaryKey}' was not found in the input array.");
+            
+            throw Error.KeyNotFound(dictionaryKey);
         }
 
         public IDictionary<string, T> DecryptDictionary(byte[] input, byte[] password, EncryptionOptions options, int iterations)

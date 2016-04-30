@@ -15,9 +15,9 @@ namespace Vault.Core
         public Container(IStorage storage, Security<T> security)
         {
             if (storage == null)
-                throw new ArgumentNullException(nameof(storage));
+                throw Error.ArgumentNull(nameof(storage));
             if (security == null)
-                throw new ArgumentNullException(nameof(security));
+                throw Error.ArgumentNull(nameof(security));
 
             _storage = storage;
             _security = security;
@@ -27,7 +27,7 @@ namespace Vault.Core
         public void Insert(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             if (ResolveKeys(password, iterations).Contains(key))
-                throw new ArgumentException($"An element with the same key already exists ({key})");
+                throw Error.Argument(nameof(key), $"An element with the same key already exists ({key})");
 
             var dictionary = Decrypt(password, iterations);
             var original = dictionary.Values.ToArray();
@@ -49,7 +49,7 @@ namespace Vault.Core
             var unsavedKeys = values.Keys.Intersect(ResolveKeys(password, iterations)).ToArray();
 
             if (unsavedKeys.Length != 0)
-                throw new ArgumentException($@"Elements with these keys already exist: 
+                throw Error.Argument($@"Elements with these keys already exist: 
 
 {string.Join(Environment.NewLine, unsavedKeys)}");
 
@@ -74,7 +74,7 @@ namespace Vault.Core
         public void Update(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             if (!ResolveKeys(password, iterations).Contains(key))
-                throw new ArgumentException($"An element with that key does not exist ({key})");
+                throw Error.Argument(nameof(key), $"An element with that key does not exist ({key})");
 
             var dictionary = Decrypt(password, iterations);
             var original = dictionary.Values.ToArray();
@@ -96,7 +96,7 @@ namespace Vault.Core
             var unsavedKeys = values.Keys.Except(ResolveKeys(password, iterations)).ToArray();
 
             if (unsavedKeys.Length != 0)
-                throw new ArgumentException($@"Elements with these keys does not exist: 
+                throw Error.Argument($@"Elements with these keys does not exist: 
 
 {string.Join(Environment.NewLine, unsavedKeys)}");
 
@@ -121,7 +121,7 @@ namespace Vault.Core
         public void Delete(string key, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             if (!ResolveKeys(password, iterations).Contains(key))
-                throw new ArgumentException($"An element with that key does not exist ({key})");
+                throw Error.Argument(nameof(key), $"An element with that key does not exist ({key})");
 
             var dictionary = Decrypt(password, iterations);
             var original = dictionary.Values.ToArray();
@@ -143,7 +143,7 @@ namespace Vault.Core
             var unsavedKeys = keys.Except(ResolveKeys(password, iterations)).ToArray();
 
             if (unsavedKeys.Length != 0)
-                throw new ArgumentException($@"Elements with these keys does not exist: 
+                throw Error.Argument($@"Elements with these keys does not exist: 
 
 {string.Join(Environment.NewLine, unsavedKeys)}");
 
@@ -243,8 +243,8 @@ namespace Vault.Core
             _storage.Ensure();
 
             if (_storage.Length <= sizeof(EncryptionOptions)) //Empty storage
-                throw new KeyNotFoundException($"Key '{key}' was not found in the input array.");
-                        
+                throw Error.KeyNotFound(key);
+
             if (_storage.HasOffsets)
             {
                 return DecryptUsingOffsets(key, password, iterations);
@@ -313,7 +313,7 @@ namespace Vault.Core
                 return DecryptUsingOffsetsWithoutEncryptedResult(key, password, iterations, indexes, keyBytes, options);
             }
 
-            throw ThrowKeyNotFound(key);
+            throw Error.KeyNotFound(key);
         }
 
         T DecryptUsingOffsetsWithoutEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes, EncryptionOptions options)
@@ -394,7 +394,7 @@ namespace Vault.Core
                 }
             }
 
-            throw ThrowKeyNotFound(key);
+            throw Error.KeyNotFound(key);
         }
 
         T DecryptUsingOffsetsWithEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes)
@@ -468,7 +468,7 @@ namespace Vault.Core
                 } while ((byte*)ptr - b != indexes.Length);
             }
 
-            throw ThrowKeyNotFound(key);
+            throw Error.KeyNotFound(key);
         }
 
         byte[] ReadEncryptedStorage(out EncryptionOptions options)
@@ -517,6 +517,6 @@ namespace Vault.Core
             return bytes;
         }
 
-        static Exception ThrowKeyNotFound(string key) => new KeyNotFoundException($"Key '{key}' was not found in the input array.");
+        
     }
 }
