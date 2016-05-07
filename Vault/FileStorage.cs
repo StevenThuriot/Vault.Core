@@ -34,7 +34,9 @@ namespace Vault.Core
             }
         }
 
-        public Stream Create() => new FileStream(_file, FileMode.Create);
+        public bool CanMerge => ReadEncryptionOptions().CanMerge();
+
+        public Stream Create() => new FileStream(_file, FileMode.Create, FileAccess.Write, FileShare.None);
 
         public Stream Read() => new FileStream(_file, FileMode.Open, FileAccess.Read, FileShare.Read);
 
@@ -51,24 +53,34 @@ namespace Vault.Core
                 throw Error.FileNotFound(_file);
         }
 
+        EncryptionOptions? _options;
         public unsafe EncryptionOptions ReadEncryptionOptions()
         {
-            if (Length <= sizeof(EncryptionOptions))
-                return EncryptionOptions.None;
-
-            byte[] bytes;
-            using (var fs = Read())
+            if (!_options.HasValue)
             {
-                bytes = new byte[sizeof(EncryptionOptions)];
-                fs.Read(bytes, 0, sizeof(EncryptionOptions));
+                if (Length <= sizeof(EncryptionOptions))
+                {
+                    _options = EncryptionOptions.None;
+                }
+                else
+                {
+                    byte[] bytes;
+                    using (var fs = Read())
+                    {
+                        bytes = new byte[sizeof(EncryptionOptions)];
+                        fs.Read(bytes, 0, sizeof(EncryptionOptions));
+                    }
+
+                    EncryptionOptions options;
+
+                    fixed (byte* b = bytes)
+                        options = *(EncryptionOptions*)b;
+
+                    _options = options;
+                }
             }
 
-            EncryptionOptions options;
-
-            fixed (byte* b = bytes)
-                options = *(EncryptionOptions*)b;
-
-            return options;
+            return _options.Value;
         }
 
         public unsafe Stream Read(out EncryptionOptions options)
@@ -82,11 +94,14 @@ namespace Vault.Core
             fixed (byte* b = bytes)
                 options = *(EncryptionOptions*)b;
 
+            _options = options;
             return fs;
         }
 
         public unsafe Stream Create(EncryptionOptions options)
         {
+            _options = options;
+
             var fs = Create();
 
             var bytes = new byte[sizeof(EncryptionOptions)];
@@ -96,6 +111,16 @@ namespace Vault.Core
 
             fs.Write(bytes, 0, sizeof(EncryptionOptions));
 
+            return fs;
+        }
+
+        public Stream Append()
+        {
+            if (!CanMerge)
+                throw new NotSupportedException("Can't merge to this type of container");
+
+            var fs = new FileStream(_file, FileMode.Append, FileAccess.Write, FileShare.None);
+            
             return fs;
         }
     }

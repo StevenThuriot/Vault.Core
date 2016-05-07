@@ -11,6 +11,51 @@ namespace Vault.Core
     {
         #region Key Value Encryption
 
+        void Encrypt(Stream stream, string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations, out ushort keyLength, out ushort encryptedLength)
+        {
+            byte[] keyArray;
+            
+            if (options.AreKeysEncrypted())
+            {
+                keyArray = Security.EncryptString(key, password, saltSize, iterations);
+            }
+            else
+            {
+                keyArray = new byte[key.Length * sizeof(char)];
+
+                fixed (void* keyPtr = key, destPtr = keyArray)
+                    UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
+            }
+                        
+            var encrypted = EncryptValue(value, password, saltSize, iterations);
+
+            keyLength = (ushort)keyArray.Length;
+            encryptedLength = (ushort)encrypted.Length;
+
+            var index = new byte[sizeof(ushort)];
+            fixed (void* ptr = index)
+                *((ushort*)ptr) = keyLength;
+            stream.Write(index, 0, sizeof(ushort));
+            fixed (void* ptr = index)
+                *((ushort*)ptr) = encryptedLength;
+            stream.Write(index, 0, sizeof(ushort));
+
+            stream.Write(keyArray, 0, keyLength);
+            stream.Write(encrypted, 0, encryptedLength);
+            
+            encrypted.Clear();
+        }
+
+        public byte[] Encrypt(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        {            
+            using (var stream = new MemoryStream())
+            {
+                ushort keyLength, encryptedLength;
+                Encrypt(stream, key, value, password, options, saltSize, iterations, out keyLength, out encryptedLength);
+                return stream.ToArray();
+            }
+        }
+
         public byte[] EncryptDictionary(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             byte[] offsets;
@@ -41,43 +86,13 @@ namespace Vault.Core
             {
                 var counter = 0;
                 var offset = (ushort)sizeof(EncryptionOptions);
-
-                var keysShouldBeEncrypted = options.AreKeysEncrypted();
-
+                
                 foreach (var kvp in values)
                 {
                     var key = kvp.Key;
 
-                    byte[] keyArray;
-                    if (keysShouldBeEncrypted)
-                    {
-                        keyArray = Security.EncryptString(key, password, saltSize, iterations);
-                    }
-                    else
-                    {
-                        keyArray = new byte[key.Length * sizeof(char)];
-
-                        fixed (void* keyPtr = key, destPtr = keyArray)
-                            UnsafeNativeMethods.memcpy(destPtr, keyPtr, keyArray.Length);
-                    }
-
-
-                    var encrypted = EncryptValue(kvp.Value, password, saltSize, iterations);
-
-                    var index = new byte[sizeof(ushort)];
-                    fixed (void* ptr = index)
-                        *((ushort*)ptr) = (ushort)keyArray.Length;
-                    stream.Write(index, 0, sizeof(ushort));
-
-                    fixed (void* ptr = index)
-                        *((ushort*)ptr) = (ushort)encrypted.Length;
-                    stream.Write(index, 0, sizeof(ushort));
-
-                    stream.Write(keyArray, 0, keyArray.Length);
-                    stream.Write(encrypted, 0, encrypted.Length);
-
-                    encrypted.Clear();
-
+                    ushort keyLength, encryptedLength;
+                    Encrypt(stream, kvp.Key, kvp.Value, password, options, saltSize, iterations, out keyLength, out encryptedLength);
 
                     fixed (byte* b = &offsets[counter])
                     {
@@ -99,11 +114,11 @@ namespace Vault.Core
                                 ptr++;
                             }
 
-                            counter += sizeof(ushort) + keyArray.Length;
+                            counter += sizeof(ushort) + keyLength;
                         }
                     }
 
-                    offset = (ushort)(offset + (sizeof(ushort) * 2) + keyArray.Length + encrypted.Length);
+                    offset = (ushort)(offset + (sizeof(ushort) * 2) + keyLength + encryptedLength);
                     counter += sizeof(ushort);
                 }
 

@@ -28,19 +28,48 @@ namespace Vault.Core
         {
             if (ResolveKeys(password, iterations).Contains(key))
                 throw Error.Argument(nameof(key), $"An element with the same key already exists ({key})");
-
-            var dictionary = Decrypt(password, iterations);
-            var original = dictionary.Values.ToArray();
-
-            dictionary[key] = value;
-
-            Encrypt(dictionary, password, options, saltSize, iterations);
-
-            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+                        
+            if (_storage.CanMerge)
             {
-                //Clean up decrypted keys, make user clean up their own.
-                foreach (var disposable in original.OfType<IDisposable>())
-                    disposable.Dispose();
+                //We can append!
+                using (var fs = _storage.Append())
+                {                    
+                    if (_storage.HasOffsets)
+                    {
+                        var offset = (ushort)(fs.Length);
+
+                        var indexes = _storage.ResolveIndexes();
+                        var newIndexes = new byte[indexes.Length + sizeof(ushort)];
+                        Array.Copy(indexes, newIndexes, indexes.Length);
+                        
+                        fixed (byte* b = &newIndexes[indexes.Length])
+                        {
+                            *((ushort*)b) = offset;
+                        }
+
+                        _storage.WriteIndex(newIndexes);
+                    }
+
+                    var encrypted = _security.Encrypt(key, value, password, options, saltSize, iterations);
+                    fs.Write(encrypted, 0, encrypted.Length);
+                    encrypted.Clear();
+                }
+            }
+            else
+            {
+                var dictionary = Decrypt(password, iterations);
+                var original = dictionary.Values.ToArray();
+
+                dictionary[key] = value;
+
+                Encrypt(dictionary, password, options, saltSize, iterations);
+
+                if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+                {
+                    //Clean up decrypted keys, make user clean up their own.
+                    foreach (var disposable in original.OfType<IDisposable>())
+                        disposable.Dispose();
+                }
             }
         }
 

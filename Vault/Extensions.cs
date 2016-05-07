@@ -25,7 +25,11 @@ namespace Vault.Core.Extensions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
         public static bool AreKeysEncrypted(this EncryptionOptions options) => (options & EncryptionOptions.Keys) == EncryptionOptions.Keys;
-        
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
+        public static bool CanMerge(this EncryptionOptions options) => (options & EncryptionOptions.Keys & EncryptionOptions.Zip & EncryptionOptions.Result) == 0;
+
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
