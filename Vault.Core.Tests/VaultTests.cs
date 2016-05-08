@@ -6,26 +6,52 @@ using System.Linq;
 using System.Reflection;
 using System.IO;
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Vault.Core.Tests
 {
     [TestClass]
     public class VaultTests
     {
+        string _uniqueFilePath;
+
+        public TestContext TestContext { get; set; }
+
         const string ORIGINAL_VALUE = "This is a sentence! :)";
         const string ORIGINAL_VALUE2 = "This is another sentence! :D";
         const string ORIGINAL_VALUE3 = "This is a third sentence~";
 
         static byte[] _value;
         static byte[] _password;
-
+        
         [ClassInitialize]
+#pragma warning disable RECS0154 // Parameter is never used
         public static void InitVaultTests(TestContext context)
+#pragma warning restore RECS0154 // Parameter is never used
         {
             _value = Encoding.Unicode.GetBytes(ORIGINAL_VALUE);
             _password = Encoding.Unicode.GetBytes("This is a password!");
         }
 
+
+        [TestInitialize]
+        public void TestInit()
+        {
+            _uniqueFilePath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), TestContext.TestName + ".enc");
+            File.Delete(_uniqueFilePath);
+        }
+
+        [TestCleanup]
+        public void TestCleanup()
+        {
+            if (File.Exists(_uniqueFilePath))
+                File.Delete(_uniqueFilePath);
+
+            var idx = Path.Combine(Path.GetDirectoryName(_uniqueFilePath), Path.GetFileNameWithoutExtension(_uniqueFilePath)) + ".idx";
+
+            if (File.Exists(idx))
+                File.Delete(idx);
+        }
 
         [TestMethod]
         public void CanEncrypt()
@@ -113,8 +139,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -137,8 +162,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -159,8 +183,7 @@ namespace Vault.Core.Tests
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -195,8 +218,7 @@ namespace Vault.Core.Tests
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanResolveKeys.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -230,8 +252,7 @@ namespace Vault.Core.Tests
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanResolveEncryptedKeys.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -266,8 +287,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
             var container = ContainerFactory.FromFile(path);
@@ -302,8 +322,7 @@ namespace Vault.Core.Tests
                 { "another Key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -333,8 +352,7 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void WontCrashOnEmptyFiles()
         {
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -354,8 +372,7 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(KeyNotFoundException))]
         public void SingleKeyWillCrashOnEmptyFiles()
         {
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -381,7 +398,7 @@ namespace Vault.Core.Tests
             MergeTest(EncryptionOptions.Offsets | EncryptionOptions.Result);
         }
 
-        static void MergeTest(EncryptionOptions options)
+        void MergeTest(EncryptionOptions options)
         {
             var dictionary = new Dictionary<string, SecureString>
             {
@@ -400,8 +417,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -436,8 +452,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -487,8 +502,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -541,8 +555,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -574,8 +587,7 @@ namespace Vault.Core.Tests
                 { "another fourth key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -624,8 +636,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanInsertAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -654,8 +665,7 @@ namespace Vault.Core.Tests
                 { UpdateedKey, ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -704,8 +714,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -737,8 +746,7 @@ namespace Vault.Core.Tests
                 { "key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -787,8 +795,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -815,8 +822,7 @@ namespace Vault.Core.Tests
                 { deleteKey, ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -860,8 +866,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -889,8 +894,7 @@ namespace Vault.Core.Tests
                 { deleteKey + "2", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanDeleteAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -933,8 +937,7 @@ namespace Vault.Core.Tests
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanUpdateAKey.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -955,8 +958,7 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanMergeIntoAnEmptyFile()
         {
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -982,8 +984,7 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(FileNotFoundException))]
         public void CannotMergeIntoAFileThatDoesntExist()
         {
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1002,8 +1003,7 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(FileNotFoundException))]
         public void CannotDecryptAFileThatDoesntExist()
         {
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1148,8 +1148,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1178,8 +1177,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1208,8 +1206,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1238,8 +1235,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 
@@ -1257,6 +1253,94 @@ namespace Vault.Core.Tests
             Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
         }
 
+        [TestMethod]
+        public void SingleKeyCanBeDecryptedFromAZippedFileUsingAnIndexFileWhileTheResultIsNotEncrypted()
+        {
+            const string key = "another Key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { key, ORIGINAL_VALUE2.Secure() }
+            };
+
+
+            var path = _uniqueFilePath;
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Zip);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
+            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
+        }
+
+        [TestMethod]
+        public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheKeysAreEncrypted()
+        {
+            const string key = "another Key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { key, ORIGINAL_VALUE2.Secure() }
+            };
+
+
+            var path = _uniqueFilePath;
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Keys);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
+            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
+        }
+
+        [TestMethod]
+        public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheKeysAndResultAreEncrypted()
+        {
+            const string key = "another Key";
+            var dictionary = new Dictionary<string, SecureString>
+            {
+                {  "key", ORIGINAL_VALUE.Secure() },
+                { key, ORIGINAL_VALUE2.Secure() }
+            };
+
+
+            var path = _uniqueFilePath;
+
+            Assert.IsFalse(File.Exists(path));
+
+            var container = ContainerFactory.FromFile(path);
+            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Keys | EncryptionOptions.Result);
+
+            var file = new FileInfo(path);
+            Assert.IsTrue(file.Exists);
+            Assert.AreNotEqual(0, file.Length);
+
+            var decrypted = container.Decrypt(key, _password);
+
+            Assert.IsNotNull(decrypted);
+            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
+            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
+        }
+
+
 
         [TestMethod, ExpectedException(typeof(System.Security.Cryptography.CryptographicException))]
         public void DecryptingWithAWrongPasswordThrowsAnException()
@@ -1269,8 +1353,7 @@ namespace Vault.Core.Tests
             };
 
 
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "CanEncryptToAFile.enc");
-            File.Delete(path);
+            var path = _uniqueFilePath;
 
             Assert.IsFalse(File.Exists(path));
 

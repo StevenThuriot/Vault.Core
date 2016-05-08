@@ -11,7 +11,7 @@ namespace Vault.Core
     {
         readonly IStorage _storage;
         readonly Security<T> _security;
-        
+
         public Container(IStorage storage, Security<T> security)
         {
             if (storage == null)
@@ -28,12 +28,12 @@ namespace Vault.Core
         {
             if (ResolveKeys(password, iterations).Contains(key))
                 throw Error.Argument(nameof(key), $"An element with the same key already exists ({key})");
-                        
+
             if (_storage.CanMerge)
             {
                 //We can append!
                 using (var fs = _storage.Append())
-                {                    
+                {
                     if (_storage.HasOffsets)
                     {
                         var offset = (ushort)(fs.Length);
@@ -41,7 +41,7 @@ namespace Vault.Core
                         var indexes = _storage.ResolveIndexes();
                         var newIndexes = new byte[indexes.Length + sizeof(ushort)];
                         Array.Copy(indexes, newIndexes, indexes.Length);
-                        
+
                         fixed (byte* b = &newIndexes[indexes.Length])
                         {
                             *((ushort*)b) = offset;
@@ -217,7 +217,7 @@ namespace Vault.Core
         public void InsertOrUpdate(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             var dictionary = Decrypt(password, iterations);
-            
+
             dictionary[key] = value;
 
             Encrypt(dictionary, password, options, saltSize, iterations);
@@ -298,7 +298,7 @@ namespace Vault.Core
 
             return result;
         }
-        
+
         public IEnumerable<string> ResolveKeys(byte[] password, int iterations)
         {
             EncryptionOptions options;
@@ -315,12 +315,7 @@ namespace Vault.Core
 
 
 
-
-
-
-
-
-
+        
         T DecryptUsingOffsets(string key, byte[] password, int iterations)
         {
             var indexes = _storage.ResolveIndexes();
@@ -336,7 +331,7 @@ namespace Vault.Core
 
                 if (options.IsResultEncrypted())
                 {
-                    return DecryptUsingOffsetsWithEncryptedResult(key, password, iterations, indexes, keyBytes);
+                    return DecryptUsingOffsetsWithEncryptedResult(key, password, iterations, indexes, keyBytes, options);
                 }
 
                 return DecryptUsingOffsetsWithoutEncryptedResult(key, password, iterations, indexes, keyBytes, options);
@@ -347,6 +342,8 @@ namespace Vault.Core
 
         T DecryptUsingOffsetsWithoutEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes, EncryptionOptions options)
         {
+            var keysAreEncrypted = options.AreKeysEncrypted();
+
             using (var fs = _storage.Read())
             {
                 var readStream = fs;
@@ -381,16 +378,19 @@ namespace Vault.Core
                         {
                             readStream.Seek(*ptr, SeekOrigin.Begin);
                             readStream.Read(length, 0, sizeof(ushort));
-
-                            fixed (byte* k = length)
+                            
+                            if (!keysAreEncrypted)
                             {
-                                if (*(ushort*)k != keyBytes.Length)
+                                fixed (byte* k = length)
                                 {
-                                    ptr++;
-                                    continue;
+                                    if (*(ushort*)k != keyBytes.Length)
+                                    {
+                                        ptr++;
+                                        continue;
+                                    }
                                 }
                             }
-
+                            
                             byte[] content;
 
                             fixed (byte* k = length)
@@ -399,7 +399,15 @@ namespace Vault.Core
                             readStream.Read(length, 0, length.Length); //contentLength
                             readStream.Read(content, 0, content.Length); //key
 
-                            if (UnsafeNativeMethods.memcmp(content, keyBytes)) //check if keys match
+                            if (keysAreEncrypted)
+                                content = Security.Decrypt(content, password, iterations);
+
+                            var keysMatch = UnsafeNativeMethods.memcmp(content, keyBytes);
+
+                            if (keysAreEncrypted)
+                                content.Clear();
+
+                            if (keysMatch)
                             {
                                 fixed (byte* k = length)
                                     content = new byte[*(ushort*)k]; //content length
@@ -426,10 +434,12 @@ namespace Vault.Core
             throw Error.KeyNotFound(key);
         }
 
-        T DecryptUsingOffsetsWithEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes)
+        T DecryptUsingOffsetsWithEncryptedResult(string key, byte[] password, int iterations, byte[] indexes, byte[] keyBytes, EncryptionOptions options)
         {
-            indexes = Security.Decrypt(indexes, password, iterations);
+            var keysAreEncrypted = options.AreKeysEncrypted();
 
+            indexes = Security.Decrypt(indexes, password, iterations);
+                        
             fixed (byte* b = indexes)
             {
                 var ptr = (ushort*)b;
@@ -449,7 +459,6 @@ namespace Vault.Core
                         ptr = (ushort*)bytePtr;
                         continue;
                     }
-
 
                     var keyArray = new byte[keyLengthInBytes];
 
@@ -471,9 +480,21 @@ namespace Vault.Core
                             storageContent.Clear();
 
                             var valueLengthOffset = offset - sizeof(EncryptionOptions) + sizeof(ushort);
-                            var contentLength = decryptedStorage[valueLengthOffset];
-                            var content = new byte[contentLength];
 
+                            ushort contentLength;
+                            fixed (byte* src = decryptedStorage)
+                            {
+                                var lengthPtr = src + valueLengthOffset;
+                                contentLength = *(ushort*)lengthPtr;
+
+                                if (keysAreEncrypted)
+                                {
+                                    keyLengthInBytes = *(ushort*)(lengthPtr - sizeof(ushort));
+                                }
+                            }
+
+                            var content = new byte[contentLength];
+                            
                             fixed (byte* dest = content, src = decryptedStorage)
                             {
                                 var srcPtr = src + valueLengthOffset + sizeof(ushort) + keyLengthInBytes;

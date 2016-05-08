@@ -14,8 +14,9 @@ namespace Vault.Core
         void Encrypt(Stream stream, string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations, out ushort keyLength, out ushort encryptedLength)
         {
             byte[] keyArray;
-            
-            if (options.AreKeysEncrypted())
+
+            var keysAreEncrypted = options.AreKeysEncrypted();
+            if (keysAreEncrypted)
             {
                 keyArray = Security.EncryptString(key, password, saltSize, iterations);
             }
@@ -44,6 +45,8 @@ namespace Vault.Core
             stream.Write(encrypted, 0, encryptedLength);
             
             encrypted.Clear();
+            if (keysAreEncrypted)
+                keyArray.Clear();
         }
 
         public byte[] Encrypt(string key, T value, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
@@ -89,8 +92,6 @@ namespace Vault.Core
                 
                 foreach (var kvp in values)
                 {
-                    var key = kvp.Key;
-
                     ushort keyLength, encryptedLength;
                     Encrypt(stream, kvp.Key, kvp.Value, password, options, saltSize, iterations, out keyLength, out encryptedLength);
 
@@ -102,19 +103,18 @@ namespace Vault.Core
                         {
                             var keyPtr = (ushort*)b;
                             keyPtr++;
-
-                            *keyPtr = (ushort)key.Length;
+                            *keyPtr = (ushort)kvp.Key.Length;
                             keyPtr++;
 
                             //When encrypted, also write keys to idx
                             var ptr = (char*)keyPtr;
-                            foreach (var character in key)
+                            foreach (var character in kvp.Key)
                             {
                                 *ptr = character;
                                 ptr++;
                             }
 
-                            counter += sizeof(ushort) + keyLength;
+                            counter += sizeof(ushort) + (kvp.Key.Length * sizeof(char));
                         }
                     }
 
