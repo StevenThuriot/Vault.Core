@@ -22,7 +22,7 @@ namespace Vault.Core
         }
 
         public bool Exists => File.Exists(_file);
-        public long Length => new FileInfo(_file).Length;
+        public long Length => Exists ? new FileInfo(_file).Length : -1;
         public bool HasOffsets
         {
             get
@@ -34,7 +34,7 @@ namespace Vault.Core
             }
         }
 
-        public bool CanMerge => ReadEncryptionOptions().CanMerge();
+        public bool CanMerge => Length >= sizeof(EncryptionOptions) && ReadEncryptionOptions().CanMerge();
 
         public Stream Create() => new FileStream(_file, FileMode.Create, FileAccess.Write, FileShare.None);
 

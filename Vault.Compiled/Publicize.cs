@@ -17,4 +17,12 @@
     public partial class SecureStringSecurity { }
     public partial class Helpers { }
     public partial class Defaults { }
+
+    
 }
+
+namespace Vault.Core.Extensions
+{
+    public static partial class Extensions { }
+}
+

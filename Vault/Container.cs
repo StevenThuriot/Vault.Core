@@ -567,6 +567,59 @@ namespace Vault.Core
             return bytes;
         }
 
-        
+
+
+
+
+
+
+
+        public void Insert(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Insert(key, value, password, options, saltSize, iterations);
+        }
+
+        public void Update(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Update(key, value, password, options, saltSize, iterations);
+        }
+
+        public void Delete(string key, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Delete(key, password, options, saltSize, iterations);
+        }
+
+        public void InsertOrUpdate(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            InsertOrUpdate(key, value, password, options, saltSize, iterations);
+        }
+
+        public void Insert(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Insert(values, password, options, saltSize, iterations);
+        }
+
+        public void Update(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Update(values, password, options, saltSize, iterations);
+        }
+
+        public void Delete(IEnumerable<string> keys, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            Delete(keys, password, options, saltSize, iterations);
+        }
+
+        public void InsertOrUpdate(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            var options = _storage.ReadEncryptionOptions();
+            InsertOrUpdate(values, password, options, saltSize, iterations);
+        }
     }
 }

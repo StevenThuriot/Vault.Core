@@ -200,5 +200,45 @@ namespace Vault.Core
         {
             _container.Delete(keys, password, options, saltSize, iterations);
         }
+
+        public void Insert(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Insert(key, value, password, saltSize, iterations);
+        }
+
+        public void Update(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Update(key, value, password, saltSize, iterations);
+        }
+
+        public void Delete(string key, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Delete(key, password, saltSize, iterations);
+        }
+
+        public void InsertOrUpdate(string key, T value, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.InsertOrUpdate(key, value, password, saltSize, iterations);
+        }
+
+        public void Insert(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Insert(values, password, saltSize, iterations);
+        }
+
+        public void Update(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Update(values, password, saltSize, iterations);
+        }
+
+        public void Delete(IEnumerable<string> keys, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.Delete(keys, password, saltSize, iterations);
+        }
+
+        public void InsertOrUpdate(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)
+        {
+            _container.InsertOrUpdate(values, password, saltSize, iterations);
+        }
     }
 }

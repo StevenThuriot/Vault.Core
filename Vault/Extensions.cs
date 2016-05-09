@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace Vault.Core.Extensions
 {
-    static class Extensions
+    static partial class Extensions
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
@@ -28,7 +28,7 @@ namespace Vault.Core.Extensions
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [TargetedPatchingOptOut("Performance critical to inline across NGen image boundaries")]
-        public static bool CanMerge(this EncryptionOptions options) => (options & EncryptionOptions.Keys & EncryptionOptions.Zip & EncryptionOptions.Result) == 0;
+        public static bool CanMerge(this EncryptionOptions options) => !options.AreKeysEncrypted() && !options.IsZipped() && !options.IsResultEncrypted();
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
