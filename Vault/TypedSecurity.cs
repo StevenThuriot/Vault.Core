@@ -155,6 +155,8 @@ namespace Vault.Core
                 src = Security.Decrypt(input, password, iterations);
                 input.Clear();
             }
+            
+            var keysAreEncrypted = options.AreKeysEncrypted();
 
             fixed (byte* ptr = src)
             {
@@ -168,12 +170,30 @@ namespace Vault.Core
                     var contentSize = *keyPtr++;
 
                     p = (byte*)keyPtr;
+                    char[] key;
 
+                    if (keysAreEncrypted)
+                    {
+                        var keyBytes = new byte[keySize];
 
-                    var key = new char[keySize / sizeof(char)];
+                        fixed (void* k = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
 
-                    fixed (void* k = key)
-                        UnsafeNativeMethods.memcpy(k, p, keySize);
+                        keyBytes = Security.Decrypt(keyBytes, password, iterations);
+
+                        key = new char[keyBytes.Length / sizeof(char)];
+
+                        fixed (void* k = key, kb = keyBytes)
+                            UnsafeNativeMethods.memcpy(k, kb, keyBytes.Length);
+
+                        keyBytes.Clear();
+                    }
+                    else
+                    {
+                        key = new char[keySize / sizeof(char)];
+                        fixed (void* k = key)
+                            UnsafeNativeMethods.memcpy(k, p, keySize);
+                    }
 
                     p += keySize;
 
@@ -186,11 +206,11 @@ namespace Vault.Core
                         fixed (void* contentPtr = content)
                         {
                             UnsafeNativeMethods.memcpy(contentPtr, p, contentSize);
-                            var T = DecryptValue(content, password, iterations);
+                            var result = DecryptValue(content, password, iterations);
 
                             content.Clear();
 
-                            return T;
+                            return result;
                         }
                     }
 
