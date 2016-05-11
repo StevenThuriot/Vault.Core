@@ -6,7 +6,8 @@ using System.Linq;
 using System.Reflection;
 using System.IO;
 using System;
-using System.Runtime.CompilerServices;
+using System.Linq.Expressions;
+using Vault.Core.Extensions;
 
 namespace Vault.Core.Tests
 {
@@ -23,7 +24,29 @@ namespace Vault.Core.Tests
 
         static byte[] _value;
         static byte[] _password;
-        
+        static IEnumerable<EncryptionOptions> _testEncryptionOptions;
+
+        static IEnumerable<EncryptionOptions> ResolveAllEncryptionOptionsCombinations()
+        {
+            var initalValues = (EncryptionOptions[])Enum.GetValues(typeof(EncryptionOptions));
+            var discoveredCombinations = new HashSet<EncryptionOptions>(initalValues);
+            var queue = new Queue<EncryptionOptions>(initalValues);
+            
+            while (queue.Count > 0)
+            {
+                var a = queue.Dequeue();
+                foreach (var b in initalValues)
+                {
+                    var combo = a | b;
+                    if (discoveredCombinations.Add(combo))
+                        queue.Enqueue(combo);
+                }
+            }
+
+            return discoveredCombinations;
+        }
+
+
         [ClassInitialize]
 #pragma warning disable RECS0154 // Parameter is never used
         public static void InitVaultTests(TestContext context)
@@ -31,26 +54,44 @@ namespace Vault.Core.Tests
         {
             _value = Encoding.Unicode.GetBytes(ORIGINAL_VALUE);
             _password = Encoding.Unicode.GetBytes("This is a password!");
-        }
 
+            _testEncryptionOptions = ResolveAllEncryptionOptionsCombinations();
+        }
 
         [TestInitialize]
         public void TestInit()
         {
             _uniqueFilePath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), TestContext.TestName + ".enc");
-            File.Delete(_uniqueFilePath);
         }
 
         [TestCleanup]
         public void TestCleanup()
         {
-            if (File.Exists(_uniqueFilePath))
-                File.Delete(_uniqueFilePath);
+            File.Delete(_uniqueFilePath);
 
             var idx = Path.Combine(Path.GetDirectoryName(_uniqueFilePath), Path.GetFileNameWithoutExtension(_uniqueFilePath)) + ".idx";
+            File.Delete(idx);
+        }
 
-            if (File.Exists(idx))
+        void TestAllOptions(Action<EncryptionOptions, string> action, EncryptionOptions requiredFlagsForTest = EncryptionOptions.None)
+        {
+            TestAllOptions(action, options => (options & requiredFlagsForTest) == requiredFlagsForTest);
+        }
+
+        void TestAllOptions(Action<EncryptionOptions, string> action, Func<EncryptionOptions, bool> testFlag)
+        {
+            foreach (var options in _testEncryptionOptions)
+            {
+                if (!testFlag(options)) continue;
+
+                var file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), TestContext.TestName + "_" + options.ToString().Replace(", ", "_") + ".enc");
+
+                action(options, file);
+
+                File.Delete(file);
+                var idx = Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file)) + ".idx";
                 File.Delete(idx);
+            }
         }
 
         [TestMethod]
@@ -131,494 +172,328 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanEncryptToAFile()
         {
-            var value = ORIGINAL_VALUE.Secure();
-
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", value }
-            };
+                var value = ORIGINAL_VALUE.Secure();
 
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", value }
+                };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
 
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-        }
-
-        [TestMethod]
-        public void CanEncryptToAZippedFile()
-        {
-            var value = ORIGINAL_VALUE.Secure();
-
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", value }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
+            });
         }
 
         [TestMethod]
         public void CanDecryptAFile()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another Key", ORIGINAL_VALUE2.Secure() }
-            };
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another Key", ORIGINAL_VALUE2.Secure() }
+                };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
 
-            Assert.IsFalse(File.Exists(path));
+                var decrypted = container.Decrypt(_password);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(dictionary.Count, decrypted.Count);
+                for (int i = 0; i < dictionary.Count; i++)
+                {
+                    var expected = dictionary.ElementAt(i);
+                    var actual = decrypted.ElementAt(i);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count);
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual.Key);
-                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
-                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
-            }
+                    Assert.AreEqual(expected.Key, actual.Key);
+                    Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                    Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+                }
+            });
         }
 
         [TestMethod]
         public void CanResolveKeys()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another Key", ORIGINAL_VALUE2.Secure() }
-            };
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another Key", ORIGINAL_VALUE2.Secure() }
+                };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
 
-            Assert.IsFalse(File.Exists(path));
+                var decrypted = container.ResolveKeys(_password);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets);
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(dictionary.Count, decrypted.Count());
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
+                for (int i = 0; i < dictionary.Count; i++)
+                {
+                    var expected = dictionary.ElementAt(i);
+                    var actual = decrypted.ElementAt(i);
 
-            var decrypted = container.ResolveKeys(_password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count());
-
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual);
-            }
+                    Assert.AreEqual(expected.Key, actual);
+                }
+            }, EncryptionOptions.Offsets);
         }
-
-        [TestMethod]
-        public void CanResolveEncryptedKeys()
-        {
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another Key", ORIGINAL_VALUE2.Secure() }
-            };
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Keys);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.ResolveKeys(_password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count());
-
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual);
-            }
-        }
-
-        [TestMethod]
-        public void CanDecryptAZippedFile()
-        {
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another Key", ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Default | EncryptionOptions.Zip);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count);
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual.Key);
-                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
-                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
-            }
-        }
-
-
+        
         [TestMethod]
         public void WorksWithTemporarilyStoredSettings()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another Key", ORIGINAL_VALUE2.Secure() }
-            };
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another Key", ORIGINAL_VALUE2.Secure() }
+                };
+                
+                var container = ContainerFactory.WithSettings.FromFile(path, _password, options, clearPassword: false);
+                container.Encrypt(dictionary);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
 
-            Assert.IsFalse(File.Exists(path));
+                var decrypted = container.Decrypt();
 
-            var container = ContainerFactory.WithSettings.FromFile(path, _password, clearPassword: false);
-            container.Encrypt(dictionary);
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(dictionary.Count, decrypted.Count);
+                for (int i = 0; i < dictionary.Count; i++)
+                {
+                    var expected = dictionary.ElementAt(i);
+                    var actual = decrypted.ElementAt(i);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt();
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count);
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual.Key);
-                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
-                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
-            }
+                    Assert.AreEqual(expected.Key, actual.Key);
+                    Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                    Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+                }
+            });
         }
 
 
         [TestMethod]
         public void WontCrashOnEmptyFiles()
         {
-            var path = _uniqueFilePath;
+            TestAllOptions((options, path) =>
+            {
+                File.WriteAllText(path, "");
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreEqual(0, file.Length);
 
-            File.WriteAllText(path, "");
+                var container = ContainerFactory.FromFile(path);
+                var decrypted = container.Decrypt(_password);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreEqual(0, file.Length);
-
-            var container = ContainerFactory.FromFile(path);
-            var decrypted = container.Decrypt(_password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(0, decrypted.Count);
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(0, decrypted.Count);
+            });
         }
 
         [TestMethod, ExpectedException(typeof(KeyNotFoundException))]
         public void SingleKeyWillCrashOnEmptyFiles()
         {
-            var path = _uniqueFilePath;
+            TestAllOptions((options, path) =>
+            {
+                File.WriteAllText(path, "");
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreEqual(0, file.Length);
 
-            File.WriteAllText(path, "");
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreEqual(0, file.Length);
-
-            var container = ContainerFactory.FromFile(path);
-            container.Decrypt("test", _password);
+                var container = ContainerFactory.FromFile(path);
+                container.Decrypt("test", _password);
+            });
         }
 
         [TestMethod]
         public void CanMergeIntoAFile()
         {
-            MergeTest(EncryptionOptions.Default);
-        }
-
-        [TestMethod]
-        public void CanMergeIntoAFileWithIndexes()
-        {
-            MergeTest(EncryptionOptions.Offsets | EncryptionOptions.Result);
-        }
-
-        void MergeTest(EncryptionOptions options)
-        {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another key", ORIGINAL_VALUE2.Secure() }
-            };
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another key", ORIGINAL_VALUE2.Secure() }
+                };
 
-            var dictionary2 = new Dictionary<string, SecureString>
-            {
-                { "another key", ORIGINAL_VALUE3.Secure() },
-            };
+                var dictionary2 = new Dictionary<string, SecureString>
+                {
+                    { "another key", ORIGINAL_VALUE3.Secure() },
+                };
 
-            var dictionary3 = new Dictionary<string, SecureString>
-            {
-                { "another third key", ORIGINAL_VALUE3.Secure() }
-            };
+                var dictionary3 = new Dictionary<string, SecureString>
+                {
+                    { "another third key", ORIGINAL_VALUE3.Secure() }
+                };
 
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options: options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, options: options);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                container.InsertOrUpdate(dictionary2, _password, options: options);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            container.InsertOrUpdate(dictionary2, _password, options: options);
+                container.InsertOrUpdate(dictionary3, _password, options: options);
 
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            container.InsertOrUpdate(dictionary3, _password, options: options);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-            Assert.AreNotEqual(firstLength, file.Length);
-            Assert.IsTrue(firstLength < file.Length);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
+                Assert.AreNotEqual(firstLength, file.Length);
+                Assert.IsTrue(firstLength < file.Length);
+            });
         }
 
         [TestMethod]
         public void CanInsertAKey()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another key", ORIGINAL_VALUE2.Secure() }
-            };
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            const string insertedKey = "another third key";
-            container.Insert(insertedKey, ORIGINAL_VALUE3.Secure(), _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(3, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value))
+                var dictionary = new Dictionary<string, SecureString>
                 {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another key", ORIGINAL_VALUE2.Secure() }
+                };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-                if (item.Key == insertedKey)
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
+
+                const string insertedKey = "another third key";
+                container.Insert(insertedKey, ORIGINAL_VALUE3.Secure(), _password, options);
+
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
+
+                var decrypted = container.Decrypt(_password);
+
+                Assert.AreEqual(3, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
-                    continue;
+                    SecureString value;
+                    if (dictionary.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
+
+                    if (item.Key == insertedKey)
+                    {
+                        Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
+                        continue;
+                    }
+
+                    Assert.Fail($"Key {item.Key} not found");
                 }
-
-                Assert.Fail($"Key {item.Key} not found");
-            }
-        }
-
-        [TestMethod]
-        public void CanInsertAKeyAndDecryptWithOffsets()
-        {
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another key", ORIGINAL_VALUE2.Secure() }
-            };
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            const string insertedKey = "another third key";
-            container.Insert(insertedKey, ORIGINAL_VALUE3.Secure(), _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(3, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value))
-                {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
-
-                if (item.Key == insertedKey)
-                {
-                    Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
-                    continue;
-                }
-
-                Assert.Fail($"Key {item.Key} not found");
-            }
-
-            var decryptedValue = container.Decrypt(insertedKey, _password);
-            Assert.AreEqual(ORIGINAL_VALUE3, decryptedValue.ToUnsecureString());
+            });
         }
 
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantInsertAKeyTwice()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
             {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { "another key", ORIGINAL_VALUE2.Secure() }
-            };
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  "key", ORIGINAL_VALUE.Secure() },
+                    { "another key", ORIGINAL_VALUE2.Secure() }
+                };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                container.Insert("another key", ORIGINAL_VALUE3.Secure(), _password);
+                Assert.Fail("Should not be able to insert a key twice");
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-            
-            container.Insert("another key", ORIGINAL_VALUE3.Secure(), _password);
-            Assert.Fail("Should not be able to insert a key twice");
+            });
         }
 
         [TestMethod]
         public void CanInsertSeveralKeys()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var dictionary2 = new Dictionary<string, SecureString>
+                var dictionary2 = new Dictionary<string, SecureString>
             {
                 { "another third key", ORIGINAL_VALUE3.Secure() },
                 { "another fourth key", ORIGINAL_VALUE3.Secure() }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                container.Insert(dictionary2, _password, options);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                var decrypted = container.Decrypt(_password);
 
-            container.Insert(dictionary2, _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(dictionary.Count + dictionary2.Count, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value) || dictionary2.TryGetValue(item.Key, out value))
+                Assert.AreEqual(dictionary.Count + dictionary2.Count, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    SecureString value;
+                    if (dictionary.TryGetValue(item.Key, out value) || dictionary2.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                Assert.Fail($"Key {item.Key} not found");
-            }
+                    Assert.Fail($"Key {item.Key} not found");
+                }
+            });
         }
 
         [TestMethod, ExpectedException(typeof(ArgumentException))]
@@ -658,51 +533,50 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanUpdateAKey()
         {
-            const string UpdateedKey = "another key";
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                const string UpdateedKey = "another key";
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { UpdateedKey, ORIGINAL_VALUE2.Secure() }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                container.Update(UpdateedKey, ORIGINAL_VALUE3.Secure(), _password, options);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                var decrypted = container.Decrypt(_password);
 
-            container.Update(UpdateedKey, ORIGINAL_VALUE3.Secure(), _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(2, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                if (item.Key == UpdateedKey)
+                Assert.AreEqual(2, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
-                    continue;
-                }
+                    if (item.Key == UpdateedKey)
+                    {
+                        Assert.AreEqual(ORIGINAL_VALUE3, item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value))
-                {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    SecureString value;
+                    if (dictionary.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                Assert.Fail($"Key {item.Key} not found");
-            }
+                    Assert.Fail($"Key {item.Key} not found");
+                }
+            });
         }
 
         [TestMethod, ExpectedException(typeof(ArgumentException))]
@@ -734,50 +608,49 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanUpdateSeveralKeys()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var dictionary2 = new Dictionary<string, SecureString>
+                var dictionary2 = new Dictionary<string, SecureString>
             {
                 { "another key", ORIGINAL_VALUE3.Secure() },
                 { "key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                container.Update(dictionary2, _password, options);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            container.Update(dictionary2, _password);
+                var decrypted = container.Decrypt(_password);
 
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(2, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary2.TryGetValue(item.Key, out value) || dictionary.TryGetValue(item.Key, out value))
+                Assert.AreEqual(2, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    SecureString value;
+                    if (dictionary2.TryGetValue(item.Key, out value) || dictionary.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                Assert.Fail($"Key {item.Key} not found");
-            }
+                    Assert.Fail($"Key {item.Key} not found");
+                }
+            });
         }
 
         [TestMethod, ExpectedException(typeof(ArgumentException))]
@@ -815,45 +688,44 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanDeleteAKey()
         {
-            const string deleteKey = "another key";
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                const string deleteKey = "another key";
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { deleteKey, ORIGINAL_VALUE2.Secure() }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                container.Delete(deleteKey, _password, options);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                var decrypted = container.Decrypt(_password);
 
-            container.Delete(deleteKey, _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(1, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value))
+                Assert.AreEqual(1, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    SecureString value;
+                    if (dictionary.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                Assert.Fail($"Key {item.Key} not found");
-            }
+                    Assert.Fail($"Key {item.Key} not found");
+                }
+            });
         }
 
 
@@ -886,46 +758,45 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanDeleteSeveralKeys()
         {
-            const string deleteKey = "another key";
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                const string deleteKey = "another key";
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { deleteKey + "1", ORIGINAL_VALUE2.Secure() },
                 { deleteKey + "2", ORIGINAL_VALUE2.Secure() }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                container.Delete(new[] { deleteKey + "1", deleteKey + "2" }, _password, options);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
 
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
+                var decrypted = container.Decrypt(_password);
 
-            container.Delete(new[] { deleteKey + "1", deleteKey + "2" }, _password);
-
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(_password);
-
-            Assert.AreEqual(1, decrypted.Count);
-            foreach (var item in decrypted)
-            {
-                SecureString value;
-                if (dictionary.TryGetValue(item.Key, out value))
+                Assert.AreEqual(1, decrypted.Count);
+                foreach (var item in decrypted)
                 {
-                    Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
-                    continue;
-                }
+                    SecureString value;
+                    if (dictionary.TryGetValue(item.Key, out value))
+                    {
+                        Assert.AreEqual(value.ToUnsecureString(), item.Value.ToUnsecureString());
+                        continue;
+                    }
 
-                Assert.Fail($"Key {item.Key} not found");
-            }
+                    Assert.Fail($"Key {item.Key} not found");
+                }
+            });
         }
 
         [TestMethod, ExpectedException(typeof(ArgumentException))]
@@ -958,27 +829,26 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void CanMergeIntoAnEmptyFile()
         {
-            var path = _uniqueFilePath;
+            TestAllOptions((options, path) =>
+            {
+                File.WriteAllText(path, "");
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreEqual(0, file.Length);
 
-            File.WriteAllText(path, "");
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreEqual(0, file.Length);
-
-            var dictionary = new Dictionary<string, SecureString>
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var container = ContainerFactory.FromFile(path);
-            container.InsertOrUpdate(dictionary, _password);
+                var container = ContainerFactory.FromFile(path);
+                container.InsertOrUpdate(dictionary, _password, options);
 
-            file.Refresh();
-            Assert.AreNotEqual(0, file.Length);
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
+            });
         }
 
         [TestMethod, ExpectedException(typeof(FileNotFoundException))]
@@ -1063,285 +933,86 @@ namespace Vault.Core.Tests
         [TestMethod]
         public void EncryptedDictionaryCanBeDecrypted()
         {
-            var value = ORIGINAL_VALUE.Secure();
+            TestAllOptions((options, path) =>
+            {
+                var value = ORIGINAL_VALUE.Secure();
 
-            var dictionary = new Dictionary<string, SecureString>
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", value }
             };
 
-            var security = new SecureStringSecurity();
-            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
+                var security = new SecureStringSecurity();
+                var result = security.EncryptDictionary(dictionary, _password, options, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
-            var decrypted = security.DecryptDictionary(result, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
+                var decrypted = security.DecryptDictionary(result, _password, options, Defaults.ITERATIONS);
 
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count);
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(dictionary.Count, decrypted.Count);
+                for (int i = 0; i < dictionary.Count; i++)
+                {
+                    var expected = dictionary.ElementAt(i);
+                    var actual = decrypted.ElementAt(i);
 
-                Assert.AreEqual(expected.Key, actual.Key);
-                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
-                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
-            }
-        }
-
-        [TestMethod]
-        public void EncryptedDictionaryWithEncryptedKeysCanBeDecrypted()
-        {
-            var value = ORIGINAL_VALUE.Secure();
-
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", value }
-            };
-
-            var security = new SecureStringSecurity();
-            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Keys, Defaults.SALTSIZE, Defaults.ITERATIONS);
-
-            var decrypted = security.DecryptDictionary(result, _password, EncryptionOptions.Keys, Defaults.ITERATIONS);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(dictionary.Count, decrypted.Count);
-            for (int i = 0; i < dictionary.Count; i++)
-            {
-                var expected = dictionary.ElementAt(i);
-                var actual = decrypted.ElementAt(i);
-
-                Assert.AreEqual(expected.Key, actual.Key);
-                Assert.AreEqual(expected.Value.Length, actual.Value.Length);
-                Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
-            }
+                    Assert.AreEqual(expected.Key, actual.Key);
+                    Assert.AreEqual(expected.Value.Length, actual.Value.Length);
+                    Assert.AreEqual(expected.Value.ToUnsecureString(), actual.Value.ToUnsecureString());
+                }
+            });
         }
 
         [TestMethod]
         public void SingleKeyCanBeDecryptedFromADictionary()
         {
-            const string key = "another Key";
-            var secureString = ORIGINAL_VALUE2.Secure();
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                const string key = "another Key";
+                var secureString = ORIGINAL_VALUE2.Secure();
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 {  key, secureString }
             };
 
-            var security = new SecureStringSecurity();
-            var result = security.EncryptDictionary(dictionary, _password, EncryptionOptions.Default, Defaults.SALTSIZE, Defaults.ITERATIONS);
+                var security = new SecureStringSecurity();
+                var result = security.EncryptDictionary(dictionary, _password, options, Defaults.SALTSIZE, Defaults.ITERATIONS);
 
-            var decrypted = security.DecryptDictionary(result, key, _password, EncryptionOptions.Default, Defaults.ITERATIONS);
+                var decrypted = security.DecryptDictionary(result, key, _password, options, Defaults.ITERATIONS);
 
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(secureString.Length, decrypted.Length);
-            Assert.AreEqual(secureString.ToUnsecureString(), decrypted.ToUnsecureString());
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(secureString.Length, decrypted.Length);
+                Assert.AreEqual(secureString.ToUnsecureString(), decrypted.ToUnsecureString());
+            });
         }
 
         [TestMethod]
         public void SingleKeyCanBeDecryptedFromAFile()
         {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                const string key = "another Key";
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { key, ORIGINAL_VALUE2.Secure() }
             };
 
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
 
-            Assert.IsFalse(File.Exists(path));
+                var decrypted = container.Decrypt(key, _password);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
+                Assert.IsNotNull(decrypted);
+                Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
+                Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
+            });
         }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAZippedFile()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, options: EncryptionOptions.Default | EncryptionOptions.Zip);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheResultIsEncrypted()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAZippedFileUsingAnIndexFileWhileTheResultIsEncrypted()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Result | EncryptionOptions.Zip);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAZippedFileUsingAnIndexFileWhileTheResultIsNotEncrypted()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Zip);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheKeysAreEncrypted()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Keys);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-        [TestMethod]
-        public void SingleKeyCanBeDecryptedFromAFileUsingAnIndexFileWhileTheKeysAndResultAreEncrypted()
-        {
-            const string key = "another Key";
-            var dictionary = new Dictionary<string, SecureString>
-            {
-                {  "key", ORIGINAL_VALUE.Secure() },
-                { key, ORIGINAL_VALUE2.Secure() }
-            };
-
-
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password, EncryptionOptions.Offsets | EncryptionOptions.Keys | EncryptionOptions.Result);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            var decrypted = container.Decrypt(key, _password);
-
-            Assert.IsNotNull(decrypted);
-            Assert.AreEqual(ORIGINAL_VALUE2.Length, decrypted.Length);
-            Assert.AreEqual(ORIGINAL_VALUE2, decrypted.ToUnsecureString());
-        }
-
-
-
+        
         [TestMethod, ExpectedException(typeof(System.Security.Cryptography.CryptographicException))]
         public void DecryptingWithAWrongPasswordThrowsAnException()
         {
