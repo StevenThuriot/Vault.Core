@@ -6,8 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.IO;
 using System;
-using System.Linq.Expressions;
-using Vault.Core.Extensions;
+using System.Diagnostics;
 
 namespace Vault.Core.Tests
 {
@@ -80,6 +79,34 @@ namespace Vault.Core.Tests
 
         void TestAllOptions(Action<EncryptionOptions, string> action, Func<EncryptionOptions, bool> testFlag)
         {
+            var stackTrace = new StackTrace();
+
+            int i = 1;
+            MethodBase callingMethod;
+            do
+            {
+                callingMethod = stackTrace.GetFrame(i++).GetMethod();
+            }
+            while (callingMethod.Name == "TestAllOptions");
+
+            var attribute = callingMethod.GetCustomAttribute<ExpectedExceptionAttribute>();
+
+            int counter = 0;
+            if (attribute != null)
+            {
+                var method = typeof(VaultTests).GetMethod("TestForException", BindingFlags.Static | BindingFlags.NonPublic);
+                var genericMethod = method.MakeGenericMethod(attribute.ExceptionType);
+                var testForException = (TestForExceptionDelegate)genericMethod.CreateDelegate(typeof(TestForExceptionDelegate));
+                var original = action;
+                action = (o, f) =>
+                {
+                    if (testForException(original, o, f))
+                        counter++;
+                };
+            }
+
+
+
             foreach (var options in _testEncryptionOptions)
             {
                 if (!testFlag(options)) continue;
@@ -92,8 +119,29 @@ namespace Vault.Core.Tests
                 var idx = Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file)) + ".idx";
                 File.Delete(idx);
             }
+
+            if (attribute != null && counter == _testEncryptionOptions.Count())
+            {
+                var ex = (Exception)Activator.CreateInstance(attribute.ExceptionType);
+                throw ex;
+            }
         }
 
+        delegate bool TestForExceptionDelegate(Action<EncryptionOptions, string> action, EncryptionOptions options, string file);
+        protected static bool TestForException<T>(Action<EncryptionOptions, string> action, EncryptionOptions options, string file)
+            where T:Exception
+        {
+            try
+            {
+                action(options, file);
+                return false;
+            }
+            catch (T)
+            {
+                return true;
+            }
+        }
+        
         [TestMethod]
         public void CanEncrypt()
         {
@@ -499,33 +547,32 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantInsertSeveralKeysTwice()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var dictionary2 = new Dictionary<string, SecureString>
+                var dictionary2 = new Dictionary<string, SecureString>
             {
                 { "another third key", ORIGINAL_VALUE3.Secure() },
                 { "another key", ORIGINAL_VALUE3.Secure() }
             };
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            container.Insert(dictionary2, _password);
-            Assert.Fail("Should not be able to insert a key twice");
+                container.Insert(dictionary2, _password, options);
+                Assert.Fail("Should not be able to insert a key twice");
+            });
         }
 
 
@@ -582,27 +629,26 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantUpdateAKeyThatDoesntExist()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password);
-            Assert.Fail("Should not be able to Update a key that doesn't exist");
+                container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password, options);
+                Assert.Fail("Should not be able to Update a key that doesn't exist");
+            });
         }
 
         [TestMethod]
@@ -656,33 +702,32 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantUpdateSeveralKeysThatDontExist()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var dictionary2 = new Dictionary<string, SecureString>
+                var dictionary2 = new Dictionary<string, SecureString>
             {
                 { "another third key", ORIGINAL_VALUE3.Secure() },
                 { "another key", ORIGINAL_VALUE3.Secure() }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            var path = _uniqueFilePath;
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            Assert.IsFalse(File.Exists(path));
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            container.Update(dictionary2, _password);
-            Assert.Fail("Should not be able to Update a key that doesn't exist");
+                container.Update(dictionary2, _password, options);
+                Assert.Fail("Should not be able to Update a key that doesn't exist");
+            });
         }
 
         [TestMethod]
@@ -732,27 +777,26 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantDeleteAKeyThatDoesntExist()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password);
-            Assert.Fail("Should not be able to delete a key that doesn't exist");
+                container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password, options);
+                Assert.Fail("Should not be able to delete a key that doesn't exist");
+            });
         }
 
         [TestMethod]
@@ -802,27 +846,26 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(ArgumentException))]
         public void CantDeleteSeveralKeysThatDontExist()
         {
-            var dictionary = new Dictionary<string, SecureString>
+            TestAllOptions((options, path) =>
+            {
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var path = _uniqueFilePath;
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
-            Assert.IsFalse(File.Exists(path));
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
 
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
 
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-
-            var firstLength = file.Length;
-            Assert.AreNotEqual(0, firstLength);
-
-            container.Delete(new[] { "another third key", "another key" }, _password);
-            Assert.Fail("Should not be able to Update a key that doesn't exist");
+                container.Delete(new[] { "another third key", "another key" }, _password, options);
+                Assert.Fail("Should not be able to Update a key that doesn't exist");
+            });
         }
 
 
@@ -854,33 +897,32 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(FileNotFoundException))]
         public void CannotMergeIntoAFileThatDoesntExist()
         {
-            var path = _uniqueFilePath;
+            TestAllOptions((options, path) =>
+            {
 
-            Assert.IsFalse(File.Exists(path));
-
-            var dictionary = new Dictionary<string, SecureString>
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", ORIGINAL_VALUE.Secure() },
                 { "another key", ORIGINAL_VALUE2.Secure() }
             };
 
-            var container = ContainerFactory.FromFile(path);
-            container.InsertOrUpdate(dictionary, _password);
+                var container = ContainerFactory.FromFile(path);
+                container.InsertOrUpdate(dictionary, _password, options);
 
-            Assert.Fail("Should have thrown a FileNotFoundException");
+                Assert.Fail("Should have thrown a FileNotFoundException");
+            });
         }
 
         [TestMethod, ExpectedException(typeof(FileNotFoundException))]
         public void CannotDecryptAFileThatDoesntExist()
         {
-            var path = _uniqueFilePath;
+            TestAllOptions((options, path) =>
+            {
+                var container = ContainerFactory.FromFile(path);
+                container.Decrypt(_password);
 
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Decrypt(_password);
-
-            Assert.Fail("Should have thrown a FileNotFoundException");
+                Assert.Fail("Should have thrown a FileNotFoundException");
+            }, EncryptionOptions.None);
         }
 
         [TestMethod]
@@ -1016,26 +1058,24 @@ namespace Vault.Core.Tests
         [TestMethod, ExpectedException(typeof(System.Security.Cryptography.CryptographicException))]
         public void DecryptingWithAWrongPasswordThrowsAnException()
         {
-            var value = ORIGINAL_VALUE.Secure();
+            TestAllOptions((options, path) =>
+            {
+                var value = ORIGINAL_VALUE.Secure();
 
-            var dictionary = new Dictionary<string, SecureString>
+                var dictionary = new Dictionary<string, SecureString>
             {
                 {  "key", value }
             };
+                
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options);
 
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+                Assert.AreNotEqual(0, file.Length);
 
-            var path = _uniqueFilePath;
-
-            Assert.IsFalse(File.Exists(path));
-
-            var container = ContainerFactory.FromFile(path);
-            container.Encrypt(dictionary, _password);
-
-            var file = new FileInfo(path);
-            Assert.IsTrue(file.Exists);
-            Assert.AreNotEqual(0, file.Length);
-
-            container.Decrypt(Encoding.Unicode.GetBytes("This password is wrong"));
+                container.Decrypt(Encoding.Unicode.GetBytes("This password is wrong"));
+            });
         }
     }
 }
