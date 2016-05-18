@@ -13,8 +13,6 @@ namespace Vault.Core.Tests
     [TestClass]
     public class VaultTests
     {
-        string _uniqueFilePath;
-
         public TestContext TestContext { get; set; }
 
         const string ORIGINAL_VALUE = "This is a sentence! :)";
@@ -55,21 +53,6 @@ namespace Vault.Core.Tests
             _password = Encoding.Unicode.GetBytes("This is a password!");
 
             _testEncryptionOptions = ResolveAllEncryptionOptionsCombinations();
-        }
-
-        [TestInitialize]
-        public void TestInit()
-        {
-            _uniqueFilePath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), TestContext.TestName + ".enc");
-        }
-
-        [TestCleanup]
-        public void TestCleanup()
-        {
-            File.Delete(_uniqueFilePath);
-
-            var idx = Path.Combine(Path.GetDirectoryName(_uniqueFilePath), Path.GetFileNameWithoutExtension(_uniqueFilePath)) + ".idx";
-            File.Delete(idx);
         }
 
         void TestAllOptions(Action<EncryptionOptions, string> action, EncryptionOptions requiredFlagsForTest = EncryptionOptions.None)
