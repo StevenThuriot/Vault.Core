@@ -82,21 +82,73 @@ namespace Vault.Core
 
 {string.Join(Environment.NewLine, unsavedKeys)}");
 
-            var dictionary = Decrypt(password, iterations);
-            var original = dictionary.Values.ToArray();
-
-            foreach (var kvp in values)
+            if (_storage.CanMerge)
             {
-                dictionary[kvp.Key] = kvp.Value;
+                //We can append!
+                using (var fs = _storage.Append())
+                {
+                    var hasOffsets = _storage.HasOffsets;
+                    byte[] newIndexes = null;
+                    int oldIndexLength = 0;
+                    ushort offset = 0;
+
+                    if (hasOffsets)
+                    {                        
+                        var indexes = _storage.ResolveIndexes();
+                        
+                        oldIndexLength = indexes.Length;
+
+                        newIndexes = new byte[oldIndexLength + (sizeof(ushort) * values.Count)];
+                        Array.Copy(indexes, newIndexes, oldIndexLength);
+                    }
+                    
+                    foreach (var kvp in values)
+                    {
+                        var key = kvp.Key;
+                        var value = kvp.Value;
+
+                        var encrypted = _security.Encrypt(key, value, password, options, saltSize, iterations);
+
+                        offset = (ushort)(fs.Length);
+                        fs.Write(encrypted, 0, encrypted.Length);
+
+                        encrypted.Clear();
+
+                        if (hasOffsets)
+                        {
+                            fixed (byte* b = &newIndexes[oldIndexLength])
+                            {
+                                *((ushort*)b) = offset;
+                            }
+
+                            oldIndexLength += sizeof(ushort);
+                        }
+                    }
+
+                    if (hasOffsets)
+                    {
+                        _storage.WriteIndex(newIndexes);
+                    }
+                }
             }
-
-            Encrypt(dictionary, password, options, saltSize, iterations);
-
-            if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+            else
             {
-                //Clean up decrypted keys, make user clean up their own.
-                foreach (var disposable in original.OfType<IDisposable>())
-                    disposable.Dispose();
+                var dictionary = Decrypt(password, iterations);
+                var original = dictionary.Values.ToArray();
+
+                foreach (var kvp in values)
+                {
+                    dictionary[kvp.Key] = kvp.Value;
+                }
+
+                Encrypt(dictionary, password, options, saltSize, iterations);
+
+                if (typeof(IDisposable).IsAssignableFrom(typeof(T)))
+                {
+                    //Clean up decrypted keys, make user clean up their own.
+                    foreach (var disposable in original.OfType<IDisposable>())
+                        disposable.Dispose();
+                }
             }
         }
 

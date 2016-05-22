@@ -358,28 +358,21 @@ namespace Vault.Core.Tests
                 container.Decrypt("test", _password);
             });
         }
-
+        
         [TestMethod]
         public void CanMergeIntoAFile()
         {
             TestAllOptions((options, path) =>
             {
+                const string key1 = "key";
+                const string key2 = "another key";
+                const string key3 = "another second key";
+
                 var dictionary = new Dictionary<string, SecureString>
                 {
-                    {  "key", ORIGINAL_VALUE.Secure() },
-                    { "another key", ORIGINAL_VALUE2.Secure() }
+                    {  key1, ORIGINAL_VALUE.Secure() },
+                    { key2, ORIGINAL_VALUE2.Secure() }
                 };
-
-                var dictionary2 = new Dictionary<string, SecureString>
-                {
-                    { "another key", ORIGINAL_VALUE3.Secure() },
-                };
-
-                var dictionary3 = new Dictionary<string, SecureString>
-                {
-                    { "another third key", ORIGINAL_VALUE3.Secure() }
-                };
-
 
                 var container = ContainerFactory.FromFile(path);
                 container.Encrypt(dictionary, _password, options: options);
@@ -390,17 +383,72 @@ namespace Vault.Core.Tests
                 var firstLength = file.Length;
                 Assert.AreNotEqual(0, firstLength);
 
-                container.InsertOrUpdate(dictionary2, _password, options: options);
-
-                file.Refresh();
-                Assert.AreNotEqual(0, file.Length);
-
-                container.InsertOrUpdate(dictionary3, _password, options: options);
+                container.Insert(key3, ORIGINAL_VALUE3.Secure(), _password, options: options);
 
                 file.Refresh();
                 Assert.AreNotEqual(0, file.Length);
                 Assert.AreNotEqual(firstLength, file.Length);
                 Assert.IsTrue(firstLength < file.Length);
+
+
+                var allResults = container.Decrypt(_password);
+                foreach (var key in new[] { key1, key2, key3 })
+                {
+                    var result = container.Decrypt(key, _password);
+
+                    Assert.AreEqual(allResults[key].ToUnsecureString(), result.ToUnsecureString());
+                }
+
+            });
+        }
+
+        [TestMethod]
+        public void CanMergeSeveralIntoAFile()
+        {
+            TestAllOptions((options, path) =>
+            {
+                const string key1 = "key";
+                const string key2 = "another key";
+                const string key3 = "another second key";
+                const string key4 = "another third key";
+
+                var dictionary = new Dictionary<string, SecureString>
+                {
+                    {  key1, ORIGINAL_VALUE.Secure() },
+                    { key2, ORIGINAL_VALUE2.Secure() }
+                };
+
+                var dictionary2 = new Dictionary<string, SecureString>
+                {
+                    { key3, ORIGINAL_VALUE3.Secure() },
+                    { key4, ORIGINAL_VALUE3.Secure() }
+                };
+
+                var container = ContainerFactory.FromFile(path);
+                container.Encrypt(dictionary, _password, options: options);
+
+                var file = new FileInfo(path);
+                Assert.IsTrue(file.Exists);
+
+                var firstLength = file.Length;
+                Assert.AreNotEqual(0, firstLength);
+
+                container.Insert(dictionary2, _password, options: options);
+
+                file.Refresh();
+                Assert.AreNotEqual(0, file.Length);
+                Assert.AreNotEqual(firstLength, file.Length);
+                Assert.IsTrue(firstLength < file.Length);
+
+
+                var allResults = container.Decrypt(_password);
+                foreach (var key in new[] { key1, key2, key3, key4 })
+                {
+                    var result = container.Decrypt(key, _password);
+
+                    Assert.AreEqual(allResults[key].ToUnsecureString(), result.ToUnsecureString());
+                }
+
             });
         }
 
