@@ -113,11 +113,6 @@ namespace Vault.Core
             Run(pass => _container.Update(key, value, pass, _options, _saltSize, _iterations));
         }
 
-        public void Delete(string key)
-        {
-            Run(pass => _container.Delete(key, pass, _options, _saltSize, _iterations));
-        }
-
         public void Insert(IDictionary<string, T> values)
         {
             Run(pass => _container.Insert(values, pass, _options, _saltSize, _iterations));
@@ -128,9 +123,14 @@ namespace Vault.Core
             Run(pass => _container.Update(values, pass, _options, _saltSize, _iterations));
         }
 
+        public void Delete(string key)
+        {
+            Run(pass => _container.Delete(key, pass, _saltSize, _iterations));
+        }
+
         public void Delete(IEnumerable<string> keys)
         {
-            Run(pass => _container.Delete(keys, pass, _options, _saltSize, _iterations));
+            Run(pass => _container.Delete(keys, pass, _saltSize, _iterations));
         }
 
 
@@ -181,11 +181,6 @@ namespace Vault.Core
             _container.Update(key, value, password, options, saltSize, iterations);
         }
 
-        public void Delete(string key, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
-        {
-            _container.Delete(key, password, options, saltSize, iterations);
-        }
-
         public void Insert(IDictionary<string, T> values, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
         {
             _container.Insert(values, password, options, saltSize, iterations);
@@ -195,12 +190,7 @@ namespace Vault.Core
         {
             _container.Update(values, password, options, saltSize, iterations);
         }
-
-        public void Delete(IEnumerable<string> keys, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
-        {
-            _container.Delete(keys, password, options, saltSize, iterations);
-        }
-
+        
         public void Insert(string key, T value, byte[] password, ushort saltSize, int iterations)
         {
             _container.Insert(key, value, password, saltSize, iterations);

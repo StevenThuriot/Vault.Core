@@ -199,9 +199,21 @@ namespace Vault.Core
             }
         }
 
-        public void Delete(string key, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void Delete(string key, byte[] password, ushort saltSize, int iterations)
         {
-            if (!ResolveKeys(password, iterations).Contains(key))
+            EncryptionOptions options;
+            var bytes = ReadEncryptedStorage(out options);
+
+            var keys = _security.DecryptKeys(bytes, password, options, iterations);
+
+            var offset = -1L;
+            foreach (var keyOffset in keys)
+            {
+                if (keyOffset.Key != key) continue;
+                offset = keyOffset.Offset;
+            }
+
+            if (offset == -1)
                 throw Error.Argument(nameof(key), $"An element with that key does not exist ({key})");
 
             var dictionary = Decrypt(password, iterations);
@@ -219,9 +231,13 @@ namespace Vault.Core
             }
         }
 
-        public void Delete(IEnumerable<string> keys, byte[] password, EncryptionOptions options, ushort saltSize, int iterations)
+        public void Delete(IEnumerable<string> keys, byte[] password, ushort saltSize, int iterations)
         {
-            var unsavedKeys = keys.Except(ResolveKeys(password, iterations)).ToArray();
+            EncryptionOptions options;
+            var bytes = ReadEncryptedStorage(out options);
+
+            var originalKeys = _security.DecryptKeys(bytes, password, options, iterations);
+            var unsavedKeys = keys.Except(originalKeys.Select(x => x.Key)).ToArray();
 
             if (unsavedKeys.Length != 0)
                 throw Error.Argument($@"Elements with these keys does not exist: 
@@ -356,7 +372,7 @@ namespace Vault.Core
             EncryptionOptions options;
             var bytes = ReadEncryptedStorage(out options);
 
-            return _security.DecryptKeys(bytes, password, options, iterations);
+            return _security.DecryptKeys(bytes, password, options, iterations).Select(x => x.Key).ToArray();
         }
 
 
@@ -638,12 +654,6 @@ namespace Vault.Core
             Update(key, value, password, options, saltSize, iterations);
         }
 
-        public void Delete(string key, byte[] password, ushort saltSize, int iterations)
-        {
-            var options = _storage.ReadEncryptionOptions();
-            Delete(key, password, options, saltSize, iterations);
-        }
-
         public void InsertOrUpdate(string key, T value, byte[] password, ushort saltSize, int iterations)
         {
             var options = _storage.ReadEncryptionOptions();
@@ -660,12 +670,6 @@ namespace Vault.Core
         {
             var options = _storage.ReadEncryptionOptions();
             Update(values, password, options, saltSize, iterations);
-        }
-
-        public void Delete(IEnumerable<string> keys, byte[] password, ushort saltSize, int iterations)
-        {
-            var options = _storage.ReadEncryptionOptions();
-            Delete(keys, password, options, saltSize, iterations);
         }
 
         public void InsertOrUpdate(IDictionary<string, T> values, byte[] password, ushort saltSize, int iterations)

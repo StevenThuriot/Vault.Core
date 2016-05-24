@@ -297,12 +297,25 @@ namespace Vault.Core
             return result;
         }
 
-        public IEnumerable<string> DecryptKeys(byte[] input, byte[] password, EncryptionOptions options, int iterations)
+
+        public struct KeyOffset
+        {
+            public readonly string Key;
+            public readonly long Offset;
+
+
+            public KeyOffset(string key, long offset)
+            {
+                Key = key;
+                Offset = offset;
+            }
+        }
+        public IEnumerable<KeyOffset> DecryptKeys(byte[] input, byte[] password, EncryptionOptions options, int iterations)
         {
             if (input.Length == 0)
-                return Enumerable.Empty<string>();
+                return Enumerable.Empty<KeyOffset>();
 
-            var keys = new List<string>();
+            var keys = new List<KeyOffset>();
 
             var src = input;
             if (options.IsResultEncrypted())
@@ -320,7 +333,7 @@ namespace Vault.Core
                 do
                 {
                     var keyPtr = (ushort*)p;
-
+                    
                     var keySize = *keyPtr++;
                     var contentSize = *keyPtr++;
 
@@ -351,12 +364,11 @@ namespace Vault.Core
                             UnsafeNativeMethods.memcpy(k, p, keySize);
                     }
 
-                    p += keySize;
-                    
-                    keys.Add(new string(key));
+
+                    keys.Add(new KeyOffset(new string(key), (p - ptr)));
                     key.Clear();
 
-                    p += contentSize;
+                    p += keySize + contentSize;
 
                 } while ((p - ptr) != src.Length);
             }

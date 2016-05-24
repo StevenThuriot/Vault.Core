@@ -782,7 +782,7 @@ namespace Vault.Core.Tests
                 var firstLength = file.Length;
                 Assert.AreNotEqual(0, firstLength);
 
-                container.Delete(deleteKey, _password, options);
+                container.Delete(deleteKey, _password);
 
                 file.Refresh();
                 Assert.AreNotEqual(0, file.Length);
@@ -852,7 +852,7 @@ namespace Vault.Core.Tests
                 var firstLength = file.Length;
                 Assert.AreNotEqual(0, firstLength);
 
-                container.Delete(new[] { deleteKey + "1", deleteKey + "2" }, _password, options);
+                container.Delete(new[] { deleteKey + "1", deleteKey + "2" }, _password);
 
                 file.Refresh();
                 Assert.AreNotEqual(0, file.Length);
@@ -894,7 +894,7 @@ namespace Vault.Core.Tests
                 var firstLength = file.Length;
                 Assert.AreNotEqual(0, firstLength);
 
-                container.Delete(new[] { "another third key", "another key" }, _password, options);
+                container.Delete(new[] { "another third key", "another key" }, _password);
                 Assert.Fail("Should not be able to Update a key that doesn't exist");
             });
         }
