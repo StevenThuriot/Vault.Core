@@ -825,7 +825,7 @@ namespace Vault.Core.Tests
                 var firstLength = file.Length;
                 Assert.AreNotEqual(0, firstLength);
 
-                container.Update("another unexisting key", ORIGINAL_VALUE3.Secure(), _password, options);
+                container.Delete("another unexisting key", _password);
                 Assert.Fail("Should not be able to delete a key that doesn't exist");
             });
         }
